@@ -1,35 +1,49 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 
 class FirebaseConfig {
   // Firebase Configuration for gimie-launch
-  static const String projectId = 'gimie-launch';
-  static const String projectNumber = '669182239244';
-  
-  // Android Configuration
+  //
+  // Prefer: `flutterfire configure` (generates firebase_options.dart).
+  // Fallback: platform switch using values from google-services.json / GoogleService-Info.plist.
+
+  // Android Configuration (from android/app/google-services.json)
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyReplaceWithYourActualKey',
-    appId: '1:669182239244:android:YOUR_APP_ID',
+    apiKey: 'YOUR_ANDROID_API_KEY_HERE',
+    appId: '1:669182239244:android:YOUR_ANDROID_APP_ID',
     messagingSenderId: '669182239244',
     projectId: 'gimie-launch',
     storageBucket: 'gimie-launch.appspot.com',
   );
-  
-  // iOS Configuration
+
+  // iOS Configuration (from ios/Runner/GoogleService-Info.plist)
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyReplaceWithYourActualIOSKey',
+    apiKey: 'YOUR_IOS_API_KEY_HERE',
     appId: '1:669182239244:ios:YOUR_IOS_APP_ID',
     messagingSenderId: '669182239244',
     projectId: 'gimie-launch',
     storageBucket: 'gimie-launch.appspot.com',
     iosBundleId: 'com.gimie.app',
   );
-  
+
   // Get Firebase Options based on platform
   static FirebaseOptions get currentPlatform {
-    // This will be automatically handled by firebase_options.dart
-    // when you run `flutterfire configure`
-    throw UnsupportedError(
-      'Please run `flutterfire configure` to generate firebase_options.dart',
-    );
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'FirebaseConfig: web options not configured. Run `flutterfire configure`.',
+      );
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return android;
+      case TargetPlatform.iOS:
+        return ios;
+      default:
+        throw UnsupportedError(
+          'FirebaseConfig: unsupported platform $defaultTargetPlatform. '
+          'Run `flutterfire configure` to generate firebase_options.dart.',
+        );
+    }
   }
 }

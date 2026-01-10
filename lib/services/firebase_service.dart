@@ -252,10 +252,15 @@ class FirebaseService {
   // Search
   Future<List<Product>> searchProducts(String query) async {
     try {
+      final trimmed = query.trim();
+      if (trimmed.isEmpty) return [];
+
+      // Firestore prefix search requires an orderBy on the same field.
       final snapshot = await _firestore
           .collection('products')
-          .where('name', isGreaterThanOrEqualTo: query)
-          .where('name', isLessThanOrEqualTo: '$query\uf8ff')
+          .orderBy('name')
+          .startAt([trimmed])
+          .endAt(['$trimmed\uf8ff'])
           .get();
       
       return snapshot.docs

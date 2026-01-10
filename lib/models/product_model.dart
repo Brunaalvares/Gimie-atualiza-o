@@ -1,5 +1,8 @@
 class Product {
   final String id;
+  // IDs from different backends (optional). `id` is the in-app identifier.
+  final String? apiId;
+  final String? firebaseId;
   final String name;
   final String description;
   final double price;
@@ -13,6 +16,8 @@ class Product {
 
   Product({
     required this.id,
+    this.apiId,
+    this.firebaseId,
     required this.name,
     required this.description,
     required this.price,
@@ -25,24 +30,48 @@ class Product {
     this.likedBy = const [],
   });
 
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    final s = value.toString().trim().replaceAll(',', '.');
+    return double.tryParse(s) ?? 0.0;
+  }
+
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    if (value is int) {
+      // Likely milliseconds since epoch.
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+    if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
+  }
+
+  static List<String> _parseStringList(dynamic value) {
+    if (value == null) return const [];
+    if (value is List) return value.map((e) => e.toString()).toList();
+    return const [];
+  }
+
   // From JSON (API)
   factory Product.fromJson(Map<String, dynamic> json) {
+    final apiId = json['id']?.toString() ?? json['_id']?.toString();
     return Product(
-      id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
+      id: apiId ?? '',
+      apiId: apiId,
       name: json['name'] ?? '',
       description: json['description'] ?? '',
-      price: (json['price'] ?? 0).toDouble(),
+      price: _parseDouble(json['price']),
       imageUrl: json['imageUrl'] ?? json['image_url'] ?? '',
       url: json['url'] ?? json['product_url'] ?? '',
       userId: json['userId'] ?? json['user_id'] ?? '',
       category: json['category'],
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
-      likes: json['likes'] ?? 0,
-      likedBy: json['likedBy'] != null
-          ? List<String>.from(json['likedBy'])
-          : [],
+      createdAt: _parseDateTime(json['createdAt']),
+      likes: (json['likes'] is num) ? (json['likes'] as num).toInt() : (int.tryParse('${json['likes']}') ?? 0),
+      likedBy: _parseStringList(json['likedBy']),
     );
   }
 
@@ -67,9 +96,11 @@ class Product {
   factory Product.fromFirestore(Map<String, dynamic> data, String documentId) {
     return Product(
       id: documentId,
+      firebaseId: documentId,
+      apiId: data['apiId']?.toString(),
       name: data['name'] ?? '',
       description: data['description'] ?? '',
-      price: (data['price'] ?? 0).toDouble(),
+      price: _parseDouble(data['price']),
       imageUrl: data['imageUrl'] ?? '',
       url: data['url'] ?? '',
       userId: data['userId'] ?? '',
@@ -77,16 +108,15 @@ class Product {
       createdAt: data['createdAt'] != null
           ? (data['createdAt'] as dynamic).toDate()
           : DateTime.now(),
-      likes: data['likes'] ?? 0,
-      likedBy: data['likedBy'] != null
-          ? List<String>.from(data['likedBy'])
-          : [],
+      likes: (data['likes'] is num) ? (data['likes'] as num).toInt() : (int.tryParse('${data['likes']}') ?? 0),
+      likedBy: _parseStringList(data['likedBy']),
     );
   }
 
   // To Firestore
   Map<String, dynamic> toFirestore() {
     return {
+      'apiId': apiId,
       'name': name,
       'description': description,
       'price': price,
@@ -108,6 +138,8 @@ class Product {
   // Copy with
   Product copyWith({
     String? id,
+    String? apiId,
+    String? firebaseId,
     String? name,
     String? description,
     double? price,
@@ -121,6 +153,8 @@ class Product {
   }) {
     return Product(
       id: id ?? this.id,
+      apiId: apiId ?? this.apiId,
+      firebaseId: firebaseId ?? this.firebaseId,
       name: name ?? this.name,
       description: description ?? this.description,
       price: price ?? this.price,

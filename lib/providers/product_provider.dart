@@ -19,6 +19,14 @@ class ProductProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get selectedCategory => _selectedCategory;
 
+  String _dedupeKey(Product p) {
+    final u = p.url.trim();
+    if (u.isNotEmpty) return 'url:$u';
+    final name = p.name.trim().toLowerCase();
+    final img = p.imageUrl.trim();
+    return 'fallback:$name|$img|${p.price}';
+  }
+
   // Load products from both API and Firebase
   Future<void> loadProducts({String? category}) async {
     _isLoading = true;
@@ -26,32 +34,31 @@ class ProductProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      List<Product> allProducts = [];
+      final Map<String, Product> merged = {};
 
-      // Try to load from API first
-      try {
-        final apiProducts = await _apiService.getProducts(category: category);
-        allProducts.addAll(apiProducts);
-      } catch (e) {
-        debugPrint('API load products error: $e');
-      }
-
-      // Load from Firebase
+      // Prefer Firebase as canonical (likes/user ops happen there)
       try {
         final firebaseProducts = await _firebaseService.getProducts(category: category);
-        
-        // Merge products, avoiding duplicates
-        for (var fbProduct in firebaseProducts) {
-          if (!allProducts.any((p) => p.id == fbProduct.id)) {
-            allProducts.add(fbProduct);
-          }
+        for (final fbProduct in firebaseProducts) {
+          merged[_dedupeKey(fbProduct)] = fbProduct;
         }
       } catch (e) {
         debugPrint('Firebase load products error: $e');
       }
 
+      // Best-effort: load from API (only if not already in Firebase)
+      try {
+        final apiProducts = await _apiService.getProducts(category: category);
+        for (final apiProduct in apiProducts) {
+          merged.putIfAbsent(_dedupeKey(apiProduct), () => apiProduct);
+        }
+      } catch (e) {
+        debugPrint('API load products error: $e');
+      }
+
       // Sort by creation date
-      allProducts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final allProducts = merged.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       _products = allProducts;
       _errorMessage = null;
@@ -111,8 +118,9 @@ class ProductProvider extends ChangeNotifier {
       final productId = await _firebaseService.createProduct(product);
 
       // Try to add to API as well
+      String? apiId;
       try {
-        await _apiService.createProduct(
+        final apiProduct = await _apiService.createProduct(
           name: name,
           description: description,
           price: price,
@@ -120,12 +128,29 @@ class ProductProvider extends ChangeNotifier {
           url: url,
           category: category,
         );
+        apiId = apiProduct.apiId ?? apiProduct.id;
       } catch (e) {
         debugPrint('API create product error: $e');
       }
 
+      if (apiId != null && apiId.isNotEmpty) {
+        // Persist mapping to avoid calling API with a Firestore id later.
+        try {
+          await _firebaseService.updateProduct(productId, {'apiId': apiId});
+        } catch (e) {
+          debugPrint('Firebase update apiId error: $e');
+        }
+      }
+
       // Add to local list
-      _products.insert(0, product.copyWith(id: productId));
+      _products.insert(
+        0,
+        product.copyWith(
+          id: productId,
+          firebaseId: productId,
+          apiId: apiId,
+        ),
+      );
       
       _errorMessage = null;
       _isLoading = false;
@@ -145,12 +170,32 @@ class ProductProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final local = _products.firstWhere(
+        (p) => p.id == productId,
+        orElse: () => _userProducts.firstWhere(
+          (p) => p.id == productId,
+          orElse: () => Product(
+            id: productId,
+            name: '',
+            description: '',
+            price: 0,
+            imageUrl: '',
+            url: '',
+            userId: '',
+            createdAt: DateTime.now(),
+          ),
+        ),
+      );
+
       // Delete from Firebase
       await _firebaseService.deleteProduct(productId);
 
       // Try to delete from API as well
       try {
-        await _apiService.deleteProduct(productId);
+        final apiId = local.apiId;
+        if (apiId != null && apiId.isNotEmpty) {
+          await _apiService.deleteProduct(apiId);
+        }
       } catch (e) {
         debugPrint('API delete product error: $e');
       }
@@ -174,21 +219,36 @@ class ProductProvider extends ChangeNotifier {
   // Like/Unlike product
   Future<void> toggleLike(String productId, String userId) async {
     try {
-      // Update Firebase
-      await _firebaseService.likeProduct(productId, userId);
+      final index = _products.indexWhere((p) => p.id == productId);
+      final product = index != -1 ? _products[index] : null;
 
-      // Try to update API as well
-      try {
-        await _apiService.likeProduct(productId);
-      } catch (e) {
-        debugPrint('API like product error: $e');
+      // If it exists in Firebase, that is the canonical like/unlike.
+      if (product?.firebaseId != null) {
+        await _firebaseService.likeProduct(product!.firebaseId!, userId);
+
+        // Best-effort: update API using apiId if we have it.
+        try {
+          final apiId = product.apiId;
+          if (apiId != null && apiId.isNotEmpty) {
+            await _apiService.likeProduct(apiId);
+          }
+        } catch (e) {
+          debugPrint('API like product error: $e');
+        }
+      } else {
+        // API-only product
+        try {
+          await _apiService.likeProduct(productId);
+        } catch (e) {
+          debugPrint('API like product error: $e');
+          rethrow;
+        }
       }
 
       // Update local list
-      final index = _products.indexWhere((p) => p.id == productId);
       if (index != -1) {
-        final product = _products[index];
-        final newLikedBy = List<String>.from(product.likedBy);
+        final current = _products[index];
+        final newLikedBy = List<String>.from(current.likedBy);
         
         if (newLikedBy.contains(userId)) {
           newLikedBy.remove(userId);
@@ -196,7 +256,7 @@ class ProductProvider extends ChangeNotifier {
           newLikedBy.add(userId);
         }
 
-        _products[index] = product.copyWith(
+        _products[index] = current.copyWith(
           likedBy: newLikedBy,
           likes: newLikedBy.length,
         );
@@ -219,12 +279,14 @@ class ProductProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      List<Product> results = [];
+      final Map<String, Product> merged = {};
 
       // Search in API
       try {
         final apiResults = await _apiService.searchProducts(query);
-        results.addAll(apiResults);
+        for (final p in apiResults) {
+          merged[_dedupeKey(p)] = p;
+        }
       } catch (e) {
         debugPrint('API search error: $e');
       }
@@ -232,18 +294,16 @@ class ProductProvider extends ChangeNotifier {
       // Search in Firebase
       try {
         final firebaseResults = await _firebaseService.searchProducts(query);
-        
-        // Merge results, avoiding duplicates
-        for (var fbProduct in firebaseResults) {
-          if (!results.any((p) => p.id == fbProduct.id)) {
-            results.add(fbProduct);
-          }
+        for (final p in firebaseResults) {
+          // Prefer Firebase result if duplicated
+          merged[_dedupeKey(p)] = p;
         }
       } catch (e) {
         debugPrint('Firebase search error: $e');
       }
 
-      _products = results;
+      _products = merged.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       _errorMessage = null;
       _isLoading = false;
       notifyListeners();

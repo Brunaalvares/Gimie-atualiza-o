@@ -241,8 +241,10 @@ class ApiService {
   // Search
   Future<List<Product>> searchProducts(String query) async {
     try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.productsEndpoint}/search')
+          .replace(queryParameters: {'q': query});
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}${ApiConfig.productsEndpoint}/search?q=$query'),
+        uri,
         headers: _headers,
       ).timeout(ApiConfig.receiveTimeout);
 

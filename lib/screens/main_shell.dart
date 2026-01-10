@@ -3,6 +3,7 @@ import 'home_screen.dart';
 import 'add_product_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
+import 'favorites_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({Key? key}) : super(key: key);
@@ -18,7 +19,7 @@ class _MainShellState extends State<MainShell> {
     const HomeScreen(),
     const SearchScreen(),
     const SizedBox(), // Placeholder for FAB
-    const SizedBox(), // Placeholder
+    const FavoritesScreen(),
     const ProfileScreen(),
   ];
 

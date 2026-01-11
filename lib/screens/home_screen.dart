@@ -84,6 +84,7 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final imageUrl = product.imageUrl.trim();
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -103,11 +104,23 @@ class _ProductCard extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                image: DecorationImage(
-                  image: NetworkImage(product.imageUrl),
-                  fit: BoxFit.cover,
-                ),
+                image: imageUrl.isNotEmpty
+                    ? DecorationImage(
+                        image: NetworkImage(imageUrl),
+                        fit: BoxFit.cover,
+                        onError: (_, __) {},
+                      )
+                    : null,
               ),
+              child: imageUrl.isEmpty
+                  ? Center(
+                      child: Icon(
+                        Icons.image_not_supported_outlined,
+                        color: Colors.grey[400],
+                        size: 40,
+                      ),
+                    )
+                  : null,
             ),
           ),
           Padding(
@@ -138,9 +151,26 @@ class _ProductCard extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () async {
-                      final uri = Uri.parse(product.url);
+                      final raw = product.url.trim();
+                      final uri = Uri.tryParse(raw);
+                      if (uri == null || !uri.isAbsolute) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Link do produto inválido'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
+                      }
                       if (await canLaunchUrl(uri)) {
                         await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Não foi possível abrir o link'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
                       }
                     },
                     style: ElevatedButton.styleFrom(

@@ -174,6 +174,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       itemCount: productProvider.userProducts.length,
                       itemBuilder: (context, index) {
                         final product = productProvider.userProducts[index];
+                        final imageUrl = product.imageUrl.trim();
                         return Stack(
                           children: [
                             Container(
@@ -197,11 +198,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         borderRadius: const BorderRadius.vertical(
                                           top: Radius.circular(12),
                                         ),
-                                        image: DecorationImage(
-                                          image: NetworkImage(product.imageUrl),
-                                          fit: BoxFit.cover,
-                                        ),
+                                        image: imageUrl.isNotEmpty
+                                            ? DecorationImage(
+                                                image: NetworkImage(imageUrl),
+                                                fit: BoxFit.cover,
+                                                onError: (_, __) {},
+                                              )
+                                            : null,
                                       ),
+                                      child: imageUrl.isEmpty
+                                          ? Center(
+                                              child: Icon(
+                                                Icons.image_not_supported_outlined,
+                                                color: Colors.grey[400],
+                                                size: 36,
+                                              ),
+                                            )
+                                          : null,
                                     ),
                                   ),
                                   Padding(

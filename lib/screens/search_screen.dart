@@ -96,17 +96,31 @@ class _SearchScreenState extends State<SearchScreen> {
                   itemCount: productProvider.products.length,
                   itemBuilder: (context, index) {
                     final product = productProvider.products[index];
+                    final imageUrl = product.imageUrl.trim();
                     return Card(
                       margin: const EdgeInsets.only(bottom: 16),
                       child: ListTile(
                         leading: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            product.imageUrl,
-                            width: 60,
-                            height: 60,
-                            fit: BoxFit.cover,
-                          ),
+                          child: imageUrl.isEmpty
+                              ? Container(
+                                  width: 60,
+                                  height: 60,
+                                  color: Colors.grey[200],
+                                  child: const Icon(Icons.image_not_supported),
+                                )
+                              : Image.network(
+                                  imageUrl,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 60,
+                                    height: 60,
+                                    color: Colors.grey[200],
+                                    child: const Icon(Icons.image_not_supported),
+                                  ),
+                                ),
                         ),
                         title: Text(product.name),
                         subtitle: Text(product.formattedPrice),

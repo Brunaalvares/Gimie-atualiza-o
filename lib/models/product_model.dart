@@ -94,6 +94,20 @@ class Product {
 
   // From Firestore
   factory Product.fromFirestore(Map<String, dynamic> data, String documentId) {
+    DateTime createdAt;
+    final rawCreatedAt = data['createdAt'];
+    if (rawCreatedAt == null) {
+      createdAt = DateTime.now();
+    } else if (rawCreatedAt is DateTime) {
+      createdAt = rawCreatedAt;
+    } else {
+      try {
+        createdAt = (rawCreatedAt as dynamic).toDate() as DateTime;
+      } catch (_) {
+        createdAt = DateTime.now();
+      }
+    }
+
     return Product(
       id: documentId,
       firebaseId: documentId,
@@ -105,9 +119,7 @@ class Product {
       url: data['url'] ?? '',
       userId: data['userId'] ?? '',
       category: data['category'],
-      createdAt: data['createdAt'] != null
-          ? (data['createdAt'] as dynamic).toDate()
-          : DateTime.now(),
+      createdAt: createdAt,
       likes: (data['likes'] is num) ? (data['likes'] as num).toInt() : (int.tryParse('${data['likes']}') ?? 0),
       likedBy: _parseStringList(data['likedBy']),
     );

@@ -17,19 +17,28 @@ class UserModel {
     this.lastLogin,
   });
 
+  static DateTime _parseDateTime(dynamic value, {required DateTime fallback}) {
+    if (value == null) return fallback;
+    if (value is DateTime) return value;
+    if (value is int) {
+      // Likely milliseconds since epoch.
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+    final s = value.toString().trim();
+    return DateTime.tryParse(s) ?? fallback;
+  }
+
   // From JSON
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['id'] ?? json['uid'] ?? '',
+      id: (json['id'] ?? json['_id'] ?? json['uid'] ?? '').toString(),
       email: json['email'] ?? '',
       name: json['name'] ?? '',
       username: json['username'] ?? '',
       photoUrl: json['photoUrl'] ?? json['photo_url'],
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
+      createdAt: _parseDateTime(json['createdAt'], fallback: DateTime.now()),
       lastLogin: json['lastLogin'] != null
-          ? DateTime.parse(json['lastLogin'])
+          ? _parseDateTime(json['lastLogin'], fallback: DateTime.now())
           : null,
     );
   }

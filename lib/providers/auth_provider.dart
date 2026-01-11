@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../models/user_model.dart';
 import '../services/firebase_service.dart';
 import '../services/api_service.dart';
@@ -6,6 +7,7 @@ import '../services/api_service.dart';
 class AuthProvider extends ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
   final ApiService _apiService = ApiService();
+  StreamSubscription? _authSub;
 
   UserModel? _currentUser;
   bool _isLoading = false;
@@ -21,7 +23,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _initAuth() {
-    _firebaseService.authStateChanges.listen((user) {
+    _authSub?.cancel();
+    _authSub = _firebaseService.authStateChanges.listen((user) {
       if (user != null) {
         _loadUserData(user.uid);
       } else {
@@ -29,6 +32,12 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadUserData(String userId) async {

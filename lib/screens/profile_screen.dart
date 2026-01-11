@@ -12,17 +12,17 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  String? _loadedProductsForUserId;
+
   @override
   void initState() {
     super.initState();
-    _loadUserProducts();
   }
 
-  void _loadUserProducts() {
-    final userId = Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
-    if (userId != null) {
-      Provider.of<ProductProvider>(context, listen: false).loadUserProducts(userId);
-    }
+  void _loadUserProducts(String userId) {
+    if (_loadedProductsForUserId == userId) return;
+    _loadedProductsForUserId = userId;
+    Provider.of<ProductProvider>(context, listen: false).loadUserProducts(userId);
   }
 
   void _handleLogout() async {
@@ -66,6 +66,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
+          // Ensure products load even if the user arrives after initState.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _loadUserProducts(user.id);
+          });
+
           return SingleChildScrollView(
             child: Column(
               children: [
@@ -78,7 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       : null,
                   child: user.photoUrl == null
                       ? Text(
-                          user.name[0].toUpperCase(),
+                          (user.name.isNotEmpty ? user.name[0] : '?').toUpperCase(),
                           style: const TextStyle(
                             fontSize: 32,
                             color: Colors.white,
@@ -255,7 +260,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                                   if (confirm == true) {
                                     await productProvider.deleteProduct(product.id);
-                                    _loadUserProducts();
+                                    _loadUserProducts(user.id);
                                   }
                                 },
                               ),

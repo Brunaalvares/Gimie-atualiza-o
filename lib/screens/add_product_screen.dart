@@ -74,11 +74,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
       final path = 'products/$userId/${DateTime.now().millisecondsSinceEpoch}.jpg';
       final url = await FirebaseService().uploadImage(_imageFile!, path);
       
+      if (!mounted) return;
       setState(() {
         _imageUrl = url;
         _isUploading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isUploading = false;
       });
@@ -91,6 +93,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
         );
       }
     }
+  }
+
+  double? _parsePrice(String raw) {
+    final normalized = raw.trim().replaceAll(',', '.');
+    return double.tryParse(normalized);
   }
 
   Future<void> _handleSubmit() async {
@@ -114,11 +121,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
     final userId = Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
     if (userId == null) return;
 
+    final price = _parsePrice(_priceController.text);
+    if (price == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, insira um preço válido'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     final success = await Provider.of<ProductProvider>(context, listen: false)
         .addProduct(
       name: _nameController.text.trim(),
       description: _descriptionController.text.trim(),
-      price: double.parse(_priceController.text.trim()),
+      price: price,
       imageUrl: _imageUrl!,
       url: _urlController.text.trim(),
       userId: userId,

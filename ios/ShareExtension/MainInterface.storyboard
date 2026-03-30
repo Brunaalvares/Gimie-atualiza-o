@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="21701" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="j1y-V4-xli">
+    <device id="retina6_12" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="21678"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--Share View Controller-->
+        <scene sceneID="ceB-am-kn3">
+            <objects>
+                <viewController id="j1y-V4-xli" customClass="ShareViewController" customModule="ShareExtension" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" opaque="NO" contentMode="scaleToFill" id="wbc-yd-nQP">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="9Hn-dQ-gOv">
+                                <rect key="frame" x="20" y="59" width="353" height="200"/>
+                                <subviews>
+                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="gimie_logo" translatesAutoresizingMaskIntoConstraints="NO" id="kMh-fH-8bY">
+                                        <rect key="frame" x="151.66666666666666" y="20" width="50" height="50"/>
+                                        <constraints>
+                                            <constraint firstAttribute="width" constant="50" id="2Qh-aN-gfY"/>
+                                            <constraint firstAttribute="height" constant="50" id="Kqo-Uj-Bxw"/>
+                                        </constraints>
+                                    </imageView>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Compartilhar com Gimie" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="GJd-Qf-0HK">
+                                        <rect key="frame" x="20" y="90" width="313" height="24"/>
+                                        <fontDescription key="fontDescription" type="boldSystem" pointSize="20"/>
+                                        <color key="textColor" red="0.54509803921568623" green="0.49803921568627450" blue="0.72156862745098038" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                        <nil key="highlightedColor"/>
+                                    </label>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Processando conteúdo compartilhado..." textAlignment="center" lineBreakMode="tailTruncation" numberOfLines="0" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="bQM-Ia-0t3">
+                                        <rect key="frame" x="20" y="134" width="313" height="36"/>
+                                        <fontDescription key="fontDescription" type="system" pointSize="16"/>
+                                        <color key="textColor" systemColor="secondaryLabelColor"/>
+                                        <nil key="highlightedColor"/>
+                                    </label>
+                                </subviews>
+                                <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                                <constraints>
+                                    <constraint firstItem="kMh-fH-8bY" firstAttribute="centerX" secondItem="9Hn-dQ-gOv" secondAttribute="centerX" id="2oC-Uc-gCa"/>
+                                    <constraint firstItem="GJd-Qf-0HK" firstAttribute="leading" secondItem="9Hn-dQ-gOv" secondAttribute="leading" constant="20" id="4Yt-Hy-Qqd"/>
+                                    <constraint firstItem="bQM-Ia-0t3" firstAttribute="top" secondItem="GJd-Qf-0HK" secondAttribute="bottom" constant="20" id="6kz-Gj-Ztj"/>
+                                    <constraint firstAttribute="trailing" secondItem="bQM-Ia-0t3" secondAttribute="trailing" constant="20" id="7Ub-Eo-Nqy"/>
+                                    <constraint firstItem="kMh-fH-8bY" firstAttribute="top" secondItem="9Hn-dQ-gOv" secondAttribute="top" constant="20" id="Cz2-Qs-Uqv"/>
+                                    <constraint firstAttribute="height" constant="200" id="Ew4-QP-Xhh"/>
+                                    <constraint firstItem="GJd-Qf-0HK" firstAttribute="top" secondItem="kMh-fH-8bY" secondAttribute="bottom" constant="20" id="Hbf-Ys-dCh"/>
+                                    <constraint firstItem="bQM-Ia-0t3" firstAttribute="leading" secondItem="9Hn-dQ-gOv" secondAttribute="leading" constant="20" id="Wgr-nJ-3Ej"/>
+                                    <constraint firstAttribute="trailing" secondItem="GJd-Qf-0HK" secondAttribute="trailing" constant="20" id="qgO-kn-Qm0"/>
+                                </constraints>
+                            </view>
+                        </subviews>
+                        <color key="backgroundColor" red="0.0" green="0.0" blue="0.0" alpha="0.0" colorSpace="custom" customColorSpace="sRGB"/>
+                        <constraints>
+                            <constraint firstItem="9Hn-dQ-gOv" firstAttribute="leading" secondItem="O1u-W8-tvY" secondAttribute="leading" constant="20" id="1Tz-aZ-Iqg"/>
+                            <constraint firstItem="O1u-W8-tvY" firstAttribute="trailing" secondItem="9Hn-dQ-gOv" secondAttribute="trailing" constant="20" id="HuN-32-2Uh"/>
+                            <constraint firstItem="9Hn-dQ-gOv" firstAttribute="top" secondItem="O1u-W8-tvY" secondAttribute="top" id="Yal-FW-vhH"/>
+                        </constraints>
+                        <viewLayoutGuide key="safeArea" id="O1u-W8-tvY"/>
+                    </view>
+                    <connections>
+                        <outlet property="statusLabel" destination="bQM-Ia-0t3" id="8bC-Xf-vUQ"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="CEy-Cv-SGf" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="132" y="154"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="gimie_logo" width="512" height="512"/>
+        <systemColor name="secondaryLabelColor">
+            <color red="0.23529411764705882" green="0.23529411764705882" blue="0.2627450980392157" alpha="0.59999999999999998" colorSpace="custom" customColorSpace="sRGB"/>
+        </systemColor>
+        <systemColor name="systemBackgroundColor">
+            <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+        </systemColor>
+    </resources>
+</document>

@@ -48,6 +48,25 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	
+	<!-- URL Schemes -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>gimie.share</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>gimie</string>
+			</array>
+		</dict>
+	</array>
+	
+	<!-- App Groups -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.gimie.shareextension</string>
+	</array>
+	
 	<!-- Permissions -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Gimie precisa acessar suas fotos para você adicionar imagens de produtos</string>

@@ -3,6 +3,9 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/product_model.dart';
 import '../models/user_model.dart';
+import '../utils/debug_helper.dart';
+import 'scraping_service.dart';
+import 'currency_service.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -255,6 +258,173 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Search error: $e');
+    }
+  }
+
+  // Scraping Methods
+  
+  /// Cria produto a partir de URL usando scraping
+  Future<Product?> createProductFromUrl({
+    required String url,
+    required String userId,
+    String? category,
+  }) async {
+    try {
+      DebugHelper.log('Creating product from URL: $url', 'API');
+      
+      // Usa a nova API Gimie 2.0 que faz scraping automaticamente
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}${ApiConfig.productsEndpoint}'),
+        headers: _headers,
+        body: jsonEncode({
+          'url': url,
+          'userId': userId,
+          'category': category,
+        }),
+      ).timeout(ApiConfig.connectTimeout);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        
+        if (data['success'] == true && data['data'] != null) {
+          final productData = data['data'];
+          
+          final product = Product(
+            id: productData['id']?.toString() ?? '',
+            name: productData['name'] ?? 'Produto sem nome',
+            description: productData['description'] ?? 'Sem descrição',
+            price: (productData['price'] ?? productData['originalPrice'] ?? 0.0).toDouble(),
+            imageUrl: productData['image'] ?? productData['imageUrl'] ?? '',
+            url: productData['url'] ?? url,
+            userId: userId,
+            category: category ?? productData['category'] ?? 'Outros',
+            likes: 0,
+            likedBy: [],
+            createdAt: DateTime.tryParse(productData['createdAt'] ?? '') ?? DateTime.now(),
+          );
+          
+          DebugHelper.log('Successfully created product from URL via API', 'API');
+          return product;
+        }
+      }
+      
+      // Fallback para método anterior se a API não funcionar
+      final scrapingService = ScrapingService();
+      final scrapedData = await scrapingService.scrapeProductFromUrl(url);
+      
+      if (scrapedData == null || !scrapedData.hasValidData) {
+        throw Exception('Não foi possível extrair dados válidos da URL');
+      }
+      
+      final product = scrapingService.convertScrapedDataToProduct(
+        scrapedData: scrapedData,
+        userId: userId,
+        category: category,
+      );
+      
+      final createdProduct = await createProduct(
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        imageUrl: product.imageUrl,
+        url: product.url,
+        category: product.category,
+      );
+      
+      DebugHelper.log('Successfully created product from URL via fallback', 'API');
+      return createdProduct;
+    } catch (e) {
+      DebugHelper.logError('Failed to create product from URL', e);
+      rethrow;
+    }
+  }
+  
+  /// Obtém produtos sugeridos baseado em categoria
+  Future<List<Product>> getSuggestedProducts(String category) async {
+    try {
+      DebugHelper.log('Getting suggested products for category: $category', 'API');
+      
+      // Busca produtos existentes na API que correspondem à categoria
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}${ApiConfig.productsEndpoint}?category=$category&limit=10'),
+        headers: _headers,
+      ).timeout(ApiConfig.receiveTimeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        if (data['success'] == true && data['data'] != null) {
+          final List<dynamic> productsList = data['data']['products'] ?? data['data'];
+          
+          final products = productsList.map((json) {
+            return Product(
+              id: json['id']?.toString() ?? '',
+              name: json['name'] ?? 'Produto sem nome',
+              description: json['description'] ?? 'Sem descrição',
+              price: (json['price'] ?? json['originalPrice'] ?? 0.0).toDouble(),
+              imageUrl: json['image'] ?? json['imageUrl'] ?? '',
+              url: json['url'] ?? '',
+              userId: 'suggested',
+              category: category,
+              likes: 0,
+              likedBy: [],
+              createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
+            );
+          }).toList();
+          
+          DebugHelper.log('Found ${products.length} suggested products', 'API');
+          return products;
+        }
+      }
+      
+      // Fallback para scraping se não houver produtos na API
+      final scrapingService = ScrapingService();
+      final suggestions = await scrapingService.getProductSuggestions(category);
+      
+      final products = suggestions.map((scraped) {
+        return scrapingService.convertScrapedDataToProduct(
+          scrapedData: scraped,
+          userId: 'suggested',
+          category: category,
+        );
+      }).toList();
+      
+      DebugHelper.log('Found ${products.length} suggested products via scraping', 'API');
+      return products;
+    } catch (e) {
+      DebugHelper.logError('Failed to get suggested products', e);
+      return [];
+    }
+  }
+  
+  /// Verifica saúde da API de scraping
+  Future<bool> checkScrapingApiHealth() async {
+    try {
+      final scrapingService = ScrapingService();
+      return await scrapingService.checkHealth();
+    } catch (e) {
+      DebugHelper.logError('Failed to check scraping API health', e);
+      return false;
+    }
+  }
+  
+  /// Extrai dados de produto de uma URL sem criar
+  Future<ScrapedProductData?> previewProductFromUrl(String url) async {
+    try {
+      DebugHelper.log('Previewing product from URL: $url', 'API');
+      
+      final scrapingService = ScrapingService();
+      final scrapedData = await scrapingService.scrapeProductFromUrl(url);
+      
+      if (scrapedData != null && scrapedData.hasValidData) {
+        DebugHelper.log('Successfully previewed product: ${scrapedData.title}', 'API');
+        return scrapedData;
+      }
+      
+      return null;
+    } catch (e) {
+      DebugHelper.logError('Failed to preview product from URL', e);
+      rethrow;
     }
   }
 }

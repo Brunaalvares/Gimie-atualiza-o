@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'screens/splash_screen.dart';
 import 'providers/product_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/scraping_provider.dart';
+import 'services/share_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,8 +16,17 @@ void main() async {
     await Firebase.initializeApp(
       // options: DefaultFirebaseOptions.currentPlatform,
     );
+    debugPrint('Firebase initialized successfully');
   } catch (e) {
     debugPrint('Firebase initialization error: $e');
+  }
+  
+  // Initialize Share Service
+  try {
+    await ShareService.instance.initialize();
+    debugPrint('Share Service initialized successfully');
+  } catch (e) {
+    debugPrint('Share Service initialization error: $e');
   }
   
   runApp(const GimieApp());
@@ -30,6 +41,7 @@ class GimieApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()),
+        ChangeNotifierProvider(create: (_) => ScrapingProvider()),
       ],
       child: MaterialApp(
         title: 'Gimie',

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import '../models/user_model.dart';
 import '../models/product_model.dart';
 
@@ -232,11 +233,62 @@ class FirebaseService {
   // Firebase Storage Methods
   Future<String> uploadImage(File file, String path) async {
     try {
+      if (!await file.exists()) {
+        throw Exception('Arquivo não encontrado');
+      }
+      
+      final fileSize = await file.length();
+      if (fileSize == 0) {
+        throw Exception('Arquivo está vazio');
+      }
+      
       final ref = _storage.ref().child(path);
-      final uploadTask = await ref.putFile(file);
-      return await uploadTask.ref.getDownloadURL();
+      final metadata = SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: {
+          'uploaded': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      final uploadTask = await ref.putFile(file, metadata);
+      final downloadUrl = await uploadTask.ref.getDownloadURL();
+      
+      if (downloadUrl.isEmpty) {
+        throw Exception('URL de download está vazia');
+      }
+      
+      return downloadUrl;
     } catch (e) {
-      throw Exception('Upload image error: $e');
+      print('Erro no upload de imagem: $e');
+      throw Exception('Erro ao fazer upload da imagem: $e');
+    }
+  }
+
+  Future<String> uploadImageFromBytes(Uint8List bytes, String path) async {
+    try {
+      if (bytes.isEmpty) {
+        throw Exception('Dados da imagem estão vazios');
+      }
+      
+      final ref = _storage.ref().child(path);
+      final metadata = SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: {
+          'uploaded': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      final uploadTask = await ref.putData(bytes, metadata);
+      final downloadUrl = await uploadTask.ref.getDownloadURL();
+      
+      if (downloadUrl.isEmpty) {
+        throw Exception('URL de download está vazia');
+      }
+      
+      return downloadUrl;
+    } catch (e) {
+      print('Erro no upload de imagem via bytes: $e');
+      throw Exception('Erro ao fazer upload da imagem: $e');
     }
   }
 

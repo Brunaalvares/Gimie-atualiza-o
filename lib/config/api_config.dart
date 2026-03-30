@@ -1,6 +1,6 @@
 class ApiConfig {
-  // API Base URL
-  static const String baseUrl = 'https://web-production-3495.up.railway.app';
+  // API Base URL - Gimie API 2.0 on Vercel
+  static const String baseUrl = 'https://api2gimie.vercel.app';
   
   // API Endpoints
   static const String loginEndpoint = '/api/auth/login';
@@ -8,6 +8,14 @@ class ApiConfig {
   static const String productsEndpoint = '/api/products';
   static const String usersEndpoint = '/api/users';
   static const String uploadEndpoint = '/api/upload';
+  
+  // Scraping Endpoints (Gimie API 2.0)
+  static const String scrapeEndpoint = '/api/products';
+  static const String extractEndpoint = '/api/products/extract';
+  static const String suggestionsEndpoint = '/api/products/suggestions';
+  static const String healthEndpoint = '/health';
+  static const String currencyEndpoint = '/api/products/exchange-rates';
+  static const String convertEndpoint = '/api/products/convert';
   
   // Timeout
   static const Duration connectTimeout = Duration(seconds: 30);

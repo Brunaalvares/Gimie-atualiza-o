@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import '../providers/product_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firebase_service.dart';
+import '../services/share_service.dart';
+import '../services/api_service.dart';
+import '../services/scraping_service.dart';
+import '../utils/debug_helper.dart';
+import '../widgets/product_suggestions_widget.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({Key? key}) : super(key: key);
@@ -21,9 +27,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _urlController = TextEditingController();
   
   File? _imageFile;
+  Uint8List? _sharedImageBytes;
   String? _imageUrl;
   bool _isUploading = false;
+  bool _isScrapingUrl = false;
+  bool _showScrapingPreview = false;
   String? _selectedCategory;
+  ScrapedProductData? _scrapedData;
 
   final List<String> _categories = [
     'Eletrônicos',
@@ -36,6 +46,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _checkForSharedContent();
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
@@ -44,49 +60,134 @@ class _AddProductScreenState extends State<AddProductScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1200,
-      maxHeight: 1200,
-      imageQuality: 85,
-    );
+  Future<void> _checkForSharedContent() async {
+    try {
+      final sharedContent = await ShareService.instance.getSharedContent();
+      
+      if (sharedContent != null && mounted) {
+        setState(() {
+          if (sharedContent['text'] != null) {
+            final text = sharedContent['text'] as String;
+            if (text.trim().isNotEmpty) {
+              _descriptionController.text = text;
+            }
+          }
+          
+          if (sharedContent['url'] != null) {
+            final url = sharedContent['url'] as String;
+            if (url.trim().isNotEmpty) {
+              _urlController.text = url;
+            }
+          }
+          
+          if (sharedContent['imageBytes'] != null) {
+            _sharedImageBytes = sharedContent['imageBytes'] as Uint8List;
+          }
+        });
+        
+        // Limpa o conteúdo compartilhado após usar
+        await ShareService.instance.clearSharedContent();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Conteúdo compartilhado carregado!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Erro ao verificar conteúdo compartilhado: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao carregar conteúdo compartilhado'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
 
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null && mounted) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+          _sharedImageBytes = null; // Limpa imagem compartilhada se uma nova for selecionada
+          _imageUrl = null; // Reset URL para forçar novo upload
+        });
+      }
+    } catch (e) {
+      print('Erro ao selecionar imagem: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao selecionar imagem: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _uploadImage() async {
-    if (_imageFile == null) return;
+    if (_imageFile == null && _sharedImageBytes == null) return;
+
+    if (!mounted) return;
 
     setState(() {
       _isUploading = true;
     });
 
     try {
-      final userId = Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
-      if (userId == null) throw Exception('User not logged in');
-
-      final path = 'products/$userId/${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final url = await FirebaseService().uploadImage(_imageFile!, path);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final userId = authProvider.currentUser?.id;
       
-      setState(() {
-        _imageUrl = url;
-        _isUploading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isUploading = false;
-      });
+      if (userId == null || userId.isEmpty) {
+        throw Exception('Usuário não está logado');
+      }
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final path = 'products/$userId/$timestamp.jpg';
+      String url;
+      
+      if (_imageFile != null) {
+        url = await FirebaseService().uploadImage(_imageFile!, path);
+      } else if (_sharedImageBytes != null) {
+        url = await FirebaseService().uploadImageFromBytes(_sharedImageBytes!, path);
+      } else {
+        throw Exception('Nenhuma imagem para fazer upload');
+      }
+      
       if (mounted) {
+        setState(() {
+          _imageUrl = url;
+          _isUploading = false;
+        });
+      }
+    } catch (e) {
+      print('Erro no upload da imagem: $e');
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao fazer upload: $e'),
+            content: Text('Erro ao fazer upload da imagem: ${e.toString()}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -96,51 +197,298 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_imageFile != null && _imageUrl == null) {
-      await _uploadImage();
-      if (_imageUrl == null) return;
-    }
+    if (!mounted) return;
 
-    if (_imageUrl == null) {
+    try {
+      // Upload da imagem se necessário
+      if ((_imageFile != null || _sharedImageBytes != null) && _imageUrl == null) {
+        await _uploadImage();
+        if (_imageUrl == null) return;
+      }
+
+      // Se não há imagem local mas há dados scraped com imagem, usa a imagem scraped
+      if (_imageUrl == null && _scrapedData?.imageUrl != null && _scrapedData!.imageUrl!.isNotEmpty) {
+        _imageUrl = _scrapedData!.imageUrl;
+      }
+
+      if (_imageUrl == null || _imageUrl!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Por favor, adicione uma imagem ou use uma URL com imagem'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final userId = authProvider.currentUser?.id;
+      
+      if (userId == null || userId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Usuário não está logado'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Validação adicional dos campos
+      final name = _nameController.text.trim();
+      final description = _descriptionController.text.trim();
+      final priceText = _priceController.text.trim();
+      final url = _urlController.text.trim();
+
+      if (name.isEmpty || description.isEmpty || priceText.isEmpty || url.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Por favor, preencha todos os campos'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final price = double.tryParse(priceText);
+      if (price == null || price <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Por favor, insira um preço válido'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final productProvider = Provider.of<ProductProvider>(context, listen: false);
+      final success = await productProvider.addProduct(
+        name: name,
+        description: description,
+        price: price,
+        imageUrl: _imageUrl!,
+        url: url,
+        userId: userId,
+        category: _selectedCategory,
+      );
+
+      if (!mounted) return;
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Produto adicionado com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao adicionar produto'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Erro ao adicionar produto: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao adicionar produto: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Faz scraping de dados da URL inserida
+  Future<void> _scrapeUrlData() async {
+    final url = _urlController.text.trim();
+    
+    if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Por favor, adicione uma imagem'),
+          content: Text('Por favor, insira uma URL primeiro'),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
 
-    final userId = Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
-    if (userId == null) return;
+    if (!mounted) return;
 
-    final success = await Provider.of<ProductProvider>(context, listen: false)
-        .addProduct(
-      name: _nameController.text.trim(),
-      description: _descriptionController.text.trim(),
-      price: double.parse(_priceController.text.trim()),
-      imageUrl: _imageUrl!,
-      url: _urlController.text.trim(),
-      userId: userId,
-      category: _selectedCategory,
+    setState(() {
+      _isScrapingUrl = true;
+      _scrapedData = null;
+      _showScrapingPreview = false;
+    });
+
+    try {
+      DebugHelper.log('Starting URL scraping for: $url', 'ADD_PRODUCT');
+      
+      final apiService = ApiService();
+      final scrapedData = await apiService.previewProductFromUrl(url);
+
+      if (!mounted) return;
+
+      if (scrapedData != null && scrapedData.hasValidData) {
+        setState(() {
+          _scrapedData = scrapedData;
+          _showScrapingPreview = true;
+          
+          // Preenche campos automaticamente se estiverem vazios
+          if (_nameController.text.trim().isEmpty && scrapedData.title != null) {
+            _nameController.text = scrapedData.title!;
+          }
+          
+          if (_descriptionController.text.trim().isEmpty && scrapedData.description != null) {
+            _descriptionController.text = scrapedData.description!;
+          }
+          
+          if (_priceController.text.trim().isEmpty && scrapedData.price != null) {
+            _priceController.text = scrapedData.price!.toStringAsFixed(2);
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dados extraídos com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Não foi possível extrair dados desta URL'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      DebugHelper.logError('URL scraping failed', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao extrair dados: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isScrapingUrl = false;
+        });
+      }
+    }
+  }
+
+  /// Aplica dados scraped aos campos do formulário
+  void _applyScrapedData() {
+    if (_scrapedData == null) return;
+
+    setState(() {
+      if (_scrapedData!.title != null) {
+        _nameController.text = _scrapedData!.title!;
+      }
+      
+      if (_scrapedData!.description != null) {
+        _descriptionController.text = _scrapedData!.description!;
+      }
+      
+      if (_scrapedData!.price != null) {
+        _priceController.text = _scrapedData!.price!.toStringAsFixed(2);
+      }
+      
+      // Limpa imagem local se houver uma imagem scraped
+      if (_scrapedData!.imageUrl != null && _scrapedData!.imageUrl!.isNotEmpty) {
+        _imageFile = null;
+        _sharedImageBytes = null;
+        _imageUrl = _scrapedData!.imageUrl;
+      }
+      
+      _showScrapingPreview = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Dados aplicados ao formulário!'),
+        backgroundColor: Colors.green,
+      ),
     );
+  }
 
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Produto adicionado com sucesso!'),
-          backgroundColor: Colors.green,
+  /// Descarta dados scraped
+  void _discardScrapedData() {
+    setState(() {
+      _scrapedData = null;
+      _showScrapingPreview = false;
+    });
+  }
+
+  /// Aplica dados de produto sugerido aos campos
+  void _applySuggestedProduct(Product product) {
+    setState(() {
+      _nameController.text = product.name;
+      _descriptionController.text = product.description;
+      _priceController.text = product.price.toStringAsFixed(2);
+      _urlController.text = product.url;
+      _selectedCategory = product.category;
+      
+      // Se há imagem, usa ela
+      if (product.imageUrl.isNotEmpty) {
+        _imageFile = null;
+        _sharedImageBytes = null;
+        _imageUrl = product.imageUrl;
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Produto "${product.name}" aplicado ao formulário!'),
+        backgroundColor: Colors.green,
+        action: SnackBarAction(
+          label: 'Desfazer',
+          textColor: Colors.white,
+          onPressed: _clearForm,
         ),
+      ),
+    );
+  }
+
+  /// Limpa todos os campos do formulário
+  void _clearForm() {
+    setState(() {
+      _nameController.clear();
+      _descriptionController.clear();
+      _priceController.clear();
+      _urlController.clear();
+      _selectedCategory = null;
+      _imageFile = null;
+      _sharedImageBytes = null;
+      _imageUrl = null;
+      _scrapedData = null;
+      _showScrapingPreview = false;
+    });
+  }
+
+  DecorationImage? _getImageDecoration() {
+    if (_imageFile != null) {
+      return DecorationImage(
+        image: FileImage(_imageFile!),
+        fit: BoxFit.cover,
       );
-      Navigator.of(context).pop();
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Erro ao adicionar produto'),
-          backgroundColor: Colors.red,
-        ),
+    } else if (_sharedImageBytes != null) {
+      return DecorationImage(
+        image: MemoryImage(_sharedImageBytes!),
+        fit: BoxFit.cover,
       );
     }
+    return null;
   }
 
   @override
@@ -172,14 +520,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   decoration: BoxDecoration(
                     color: Colors.grey[200],
                     borderRadius: BorderRadius.circular(12),
-                    image: _imageFile != null
-                        ? DecorationImage(
-                            image: FileImage(_imageFile!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
+                    image: _getImageDecoration(),
                   ),
-                  child: _imageFile == null
+                  child: _imageFile == null && _sharedImageBytes == null
                       ? const Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -239,23 +582,150 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _urlController,
-                decoration: const InputDecoration(
-                  labelText: 'URL do Produto',
-                  prefixIcon: Icon(Icons.link),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, insira a URL';
-                  }
-                  if (!value.startsWith('http')) {
-                    return 'Por favor, insira uma URL válida';
-                  }
-                  return null;
-                },
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _urlController,
+                      decoration: const InputDecoration(
+                        labelText: 'URL do Produto',
+                        prefixIcon: Icon(Icons.link),
+                        hintText: 'Cole aqui o link do produto',
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Por favor, insira a URL';
+                        }
+                        if (!value.startsWith('http')) {
+                          return 'Por favor, insira uma URL válida';
+                        }
+                        return null;
+                      },
+                      onChanged: (value) {
+                        // Limpa preview quando URL muda
+                        if (_showScrapingPreview) {
+                          setState(() {
+                            _showScrapingPreview = false;
+                            _scrapedData = null;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _isScrapingUrl ? null : _scrapeUrlData,
+                    icon: _isScrapingUrl
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.auto_awesome),
+                    tooltip: 'Extrair dados automaticamente',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                      foregroundColor: Theme.of(context).primaryColor,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
+              
+              // Preview dos dados scraped
+              if (_showScrapingPreview && _scrapedData != null) ...[
+                Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              color: Theme.of(context).primaryColor,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Dados extraídos automaticamente',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              onPressed: _discardScrapedData,
+                              icon: const Icon(Icons.close),
+                              iconSize: 20,
+                              tooltip: 'Descartar',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        if (_scrapedData!.title != null) ...[
+                          Text(
+                            'Nome: ${_scrapedData!.title}',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+                        if (_scrapedData!.price != null) ...[
+                          Text(
+                            'Preço: R\$ ${_scrapedData!.price!.toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+                        if (_scrapedData!.description != null) ...[
+                          Text(
+                            'Descrição: ${_scrapedData!.description!.length > 100 ? '${_scrapedData!.description!.substring(0, 100)}...' : _scrapedData!.description}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        if (_scrapedData!.imageUrl != null && _scrapedData!.imageUrl!.isNotEmpty) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              _scrapedData!.imageUrl!,
+                              height: 100,
+                              width: 100,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  height: 100,
+                                  width: 100,
+                                  color: Colors.grey[300],
+                                  child: const Icon(Icons.error),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _applyScrapedData,
+                            icon: const Icon(Icons.check),
+                            label: const Text('Usar estes dados'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              
               DropdownButtonFormField<String>(
                 initialValue: _selectedCategory,
                 decoration: const InputDecoration(
@@ -274,6 +744,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   });
                 },
               ),
+              const SizedBox(height: 16),
+              
+              // Widget de sugestões
+              if (_selectedCategory != null)
+                ProductSuggestionsWidget(
+                  category: _selectedCategory!,
+                  onProductSelected: _applySuggestedProduct,
+                ),
+              
               const SizedBox(height: 32),
               Consumer<ProductProvider>(
                 builder: (context, provider, _) {

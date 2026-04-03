@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,55 +16,108 @@ class ShareService {
   
   ShareService._();
   
+  // Stream subscriptions para gerenciar memory leaks
+  StreamSubscription<String>? _textStreamSubscription;
+  StreamSubscription<List<SharedMediaFile>>? _mediaStreamSubscription;
+  bool _isInitialized = false;
+  
   /// Inicializa o serviço de compartilhamento
   Future<void> initialize() async {
-    if (Platform.isIOS) {
-      // Escuta por conteúdo compartilhado via Share Extension
-      _listenForSharedContent();
-      
-      // Verifica se há conteúdo compartilhado pendente
-      await _checkForPendingSharedContent();
+    if (_isInitialized) {
+      DebugHelper.log('ShareService already initialized', 'SHARE');
+      return;
     }
     
-    // Escuta por arquivos compartilhados diretamente
-    _listenForSharedFiles();
+    try {
+      DebugHelper.log('Initializing ShareService', 'SHARE');
+      
+      // Escuta por arquivos compartilhados diretamente (Android/iOS)
+      _listenForSharedFiles();
+      
+      if (Platform.isIOS) {
+        // Escuta por conteúdo compartilhado via Share Extension
+        _listenForSharedContent();
+        
+        // Verifica se há conteúdo compartilhado pendente
+        await _checkForPendingSharedContent();
+      }
+      
+      _isInitialized = true;
+      DebugHelper.log('ShareService initialized successfully', 'SHARE');
+    } catch (e) {
+      DebugHelper.logError('Failed to initialize ShareService', e);
+      rethrow;
+    }
   }
   
   /// Escuta por arquivos compartilhados diretamente (Android/iOS)
   void _listenForSharedFiles() {
     try {
-      // Texto compartilhado
-      ReceiveSharingIntent.getTextStream().listen((String value) {
-        _handleSharedText(value);
-      }, onError: (error) {
-        print('Erro ao escutar texto compartilhado: $error');
-      });
+      DebugHelper.log('Setting up shared files listeners', 'SHARE');
       
-      // Arquivos de mídia compartilhados
-      ReceiveSharingIntent.getMediaStream().listen((List<SharedMediaFile> value) {
-        _handleSharedMedia(value);
-      }, onError: (error) {
-        print('Erro ao escutar mídia compartilhada: $error');
-      });
+      // Cancela listeners anteriores se existirem
+      _textStreamSubscription?.cancel();
+      _mediaStreamSubscription?.cancel();
       
-      // Verifica conteúdo inicial compartilhado
-      ReceiveSharingIntent.getInitialText().then((String? value) {
-        if (value != null && value.isNotEmpty) {
-          _handleSharedText(value);
-        }
-      }).catchError((error) {
-        print('Erro ao obter texto inicial: $error');
-      });
+      // Texto compartilhado (stream contínuo)
+      _textStreamSubscription = ReceiveSharingIntent.getTextStream().listen(
+        (String value) {
+          if (value.isNotEmpty) {
+            DebugHelper.log('Received shared text via stream: $value', 'SHARE');
+            _handleSharedText(value);
+          }
+        },
+        onError: (error) {
+          DebugHelper.logError('Error listening to shared text stream', error);
+        },
+      );
       
-      ReceiveSharingIntent.getInitialMedia().then((List<SharedMediaFile> value) {
-        if (value.isNotEmpty) {
-          _handleSharedMedia(value);
-        }
-      }).catchError((error) {
-        print('Erro ao obter mídia inicial: $error');
-      });
+      // Arquivos de mídia compartilhados (stream contínuo)
+      _mediaStreamSubscription = ReceiveSharingIntent.getMediaStream().listen(
+        (List<SharedMediaFile> value) {
+          if (value.isNotEmpty) {
+            DebugHelper.log('Received shared media via stream: ${value.length} files', 'SHARE');
+            _handleSharedMedia(value);
+          }
+        },
+        onError: (error) {
+          DebugHelper.logError('Error listening to shared media stream', error);
+        },
+      );
+      
+      // Verifica conteúdo inicial compartilhado (apenas uma vez)
+      _checkInitialSharedContent();
+      
     } catch (e) {
-      print('Erro ao configurar listeners de compartilhamento: $e');
+      DebugHelper.logError('Error setting up shared files listeners', e);
+    }
+  }
+  
+  /// Verifica conteúdo inicial compartilhado (executado apenas uma vez)
+  Future<void> _checkInitialSharedContent() async {
+    try {
+      DebugHelper.log('Checking initial shared content', 'SHARE');
+      
+      // Texto inicial
+      final initialText = await ReceiveSharingIntent.getInitialText();
+      if (initialText != null && initialText.isNotEmpty) {
+        DebugHelper.log('Found initial shared text: $initialText', 'SHARE');
+        await _handleSharedText(initialText);
+        // Limpa o texto inicial após processar
+        ReceiveSharingIntent.reset();
+      }
+      
+      // Mídia inicial
+      final initialMedia = await ReceiveSharingIntent.getInitialMedia();
+      if (initialMedia.isNotEmpty) {
+        DebugHelper.log('Found initial shared media: ${initialMedia.length} files', 'SHARE');
+        await _handleSharedMedia(initialMedia);
+        // Limpa a mídia inicial após processar
+        ReceiveSharingIntent.reset();
+      }
+      
+    } catch (e) {
+      DebugHelper.logError('Error checking initial shared content', e);
     }
   }
   
@@ -160,29 +214,38 @@ class ShareService {
   /// Manipula texto compartilhado
   Future<void> _handleSharedText(String text) async {
     try {
-      print('Texto compartilhado: $text');
+      DebugHelper.log('Processing shared text: $text', 'SHARE');
       
-      if (text.trim().isEmpty) return;
+      if (text.trim().isEmpty) {
+        DebugHelper.log('Empty text, skipping', 'SHARE');
+        return;
+      }
       
       // Verifica se é uma URL
       if (_isURL(text)) {
+        DebugHelper.log('Text is URL, processing as URL', 'SHARE');
         await _handleSharedURL(text);
         return;
       }
       
       // Navega para a tela de adicionar produto com o texto
+      DebugHelper.log('Processing as regular text', 'SHARE');
       await _navigateToAddProduct(text: text);
     } catch (e) {
-      print('Erro ao processar texto compartilhado: $e');
+      DebugHelper.logError('Error processing shared text', e);
     }
   }
   
   /// Manipula URL compartilhada
   Future<void> _handleSharedURL(String url) async {
-    print('URL compartilhada: $url');
-    
-    // Navega para a tela de adicionar produto com a URL
-    await _navigateToAddProduct(url: url);
+    try {
+      DebugHelper.log('Processing shared URL: $url', 'SHARE');
+      
+      // Navega para a tela de adicionar produto com a URL
+      await _navigateToAddProduct(url: url);
+    } catch (e) {
+      DebugHelper.logError('Error processing shared URL', e);
+    }
   }
   
   /// Manipula imagem compartilhada (base64)
@@ -200,22 +263,33 @@ class ShareService {
   /// Manipula arquivos de mídia compartilhados
   Future<void> _handleSharedMedia(List<SharedMediaFile> mediaFiles) async {
     try {
-      if (mediaFiles.isEmpty) return;
+      if (mediaFiles.isEmpty) {
+        DebugHelper.log('No media files to process', 'SHARE');
+        return;
+      }
       
       final mediaFile = mediaFiles.first;
-      print('Arquivo compartilhado: ${mediaFile.path}');
+      DebugHelper.log('Processing shared media file: ${mediaFile.path}', 'SHARE');
       
       if (mediaFile.type == SharedMediaType.IMAGE) {
         final file = File(mediaFile.path);
         if (await file.exists()) {
+          DebugHelper.log('Reading image file: ${mediaFile.path}', 'SHARE');
           final imageBytes = await file.readAsBytes();
-          await _navigateToAddProduct(imageBytes: imageBytes);
+          
+          if (imageBytes.isNotEmpty) {
+            await _navigateToAddProduct(imageBytes: imageBytes);
+          } else {
+            DebugHelper.log('Image file is empty: ${mediaFile.path}', 'SHARE');
+          }
         } else {
-          print('Arquivo de imagem não encontrado: ${mediaFile.path}');
+          DebugHelper.log('Image file not found: ${mediaFile.path}', 'SHARE');
         }
+      } else {
+        DebugHelper.log('Unsupported media type: ${mediaFile.type}', 'SHARE');
       }
     } catch (e) {
-      print('Erro ao processar mídia compartilhada: $e');
+      DebugHelper.logError('Error processing shared media', e);
     }
   }
   
@@ -225,28 +299,47 @@ class ShareService {
     String? url,
     Uint8List? imageBytes,
   }) async {
-    // Salva os dados compartilhados temporariamente
-    final prefs = await SharedPreferences.getInstance();
-    
-    if (text != null) {
-      await prefs.setString('shared_text', text);
+    try {
+      DebugHelper.log('Saving shared content for navigation', 'SHARE');
+      
+      // Salva os dados compartilhados temporariamente
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Limpa dados anteriores
+      await clearSharedContent();
+      
+      bool hasContent = false;
+      
+      if (text != null && text.trim().isNotEmpty) {
+        await prefs.setString('shared_text', text.trim());
+        hasContent = true;
+        DebugHelper.log('Saved shared text', 'SHARE');
+      }
+      
+      if (url != null && url.trim().isNotEmpty) {
+        await prefs.setString('shared_url', url.trim());
+        hasContent = true;
+        DebugHelper.log('Saved shared URL', 'SHARE');
+      }
+      
+      if (imageBytes != null && imageBytes.isNotEmpty) {
+        final base64Image = base64Encode(imageBytes);
+        await prefs.setString('shared_image', base64Image);
+        hasContent = true;
+        DebugHelper.log('Saved shared image (${imageBytes.length} bytes)', 'SHARE');
+      }
+      
+      if (hasContent) {
+        // Sinaliza que há conteúdo compartilhado
+        await prefs.setBool('has_shared_content', true);
+        DebugHelper.log('Shared content saved successfully', 'SHARE');
+      } else {
+        DebugHelper.log('No content to save', 'SHARE');
+      }
+      
+    } catch (e) {
+      DebugHelper.logError('Error saving shared content', e);
     }
-    
-    if (url != null) {
-      await prefs.setString('shared_url', url);
-    }
-    
-    if (imageBytes != null) {
-      final base64Image = base64Encode(imageBytes);
-      await prefs.setString('shared_image', base64Image);
-    }
-    
-    // Sinaliza que há conteúdo compartilhado
-    await prefs.setBool('has_shared_content', true);
-    
-    // Aqui você pode usar um GlobalKey<NavigatorState> ou um serviço de navegação
-    // para navegar para a tela de adicionar produto
-    print('Navegando para AddProductScreen com conteúdo compartilhado');
   }
   
   /// Obtém conteúdo compartilhado salvo
@@ -308,5 +401,25 @@ class ShareService {
     } catch (e) {
       return false;
     }
+  }
+  
+  /// Limpa recursos e cancela listeners
+  void dispose() {
+    DebugHelper.log('Disposing ShareService', 'SHARE');
+    
+    _textStreamSubscription?.cancel();
+    _mediaStreamSubscription?.cancel();
+    
+    _textStreamSubscription = null;
+    _mediaStreamSubscription = null;
+    _isInitialized = false;
+  }
+  
+  /// Reinicializa o serviço (útil para testes ou reset)
+  Future<void> reinitialize() async {
+    DebugHelper.log('Reinitializing ShareService', 'SHARE');
+    
+    dispose();
+    await initialize();
   }
 }

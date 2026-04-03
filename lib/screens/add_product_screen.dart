@@ -13,7 +13,7 @@ import '../utils/debug_helper.dart';
 import '../widgets/product_suggestions_widget.dart';
 
 class AddProductScreen extends StatefulWidget {
-  const AddProductScreen({Key? key}) : super(key: key);
+  const AddProductScreen({super.key});
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -99,7 +99,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         }
       }
     } catch (e) {
-      print('Erro ao verificar conteúdo compartilhado: $e');
+      DebugHelper.logError('Erro ao verificar conteúdo compartilhado', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -130,7 +130,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         });
       }
     } catch (e) {
-      print('Erro ao selecionar imagem: $e');
+      DebugHelper.logError('Erro ao selecionar imagem', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -178,7 +178,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         });
       }
     } catch (e) {
-      print('Erro no upload da imagem: $e');
+      DebugHelper.logError('Erro no upload da imagem', e);
       if (mounted) {
         setState(() {
           _isUploading = false;
@@ -207,8 +207,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
       }
 
       // Se não há imagem local mas há dados scraped com imagem, usa a imagem scraped
-      if (_imageUrl == null && _scrapedData?.imageUrl != null && _scrapedData!.imageUrl!.isNotEmpty) {
-        _imageUrl = _scrapedData!.imageUrl;
+      if (_imageUrl == null) {
+        final scrapedImageUrl = _scrapedData?.imageUrl;
+        if (scrapedImageUrl != null && scrapedImageUrl.isNotEmpty) {
+          _imageUrl = scrapedImageUrl;
+        }
       }
 
       if (_imageUrl == null || _imageUrl!.isEmpty) {
@@ -291,7 +294,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         );
       }
     } catch (e) {
-      print('Erro ao adicionar produto: $e');
+      DebugHelper.logError('Erro ao adicionar produto', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -389,26 +392,31 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   /// Aplica dados scraped aos campos do formulário
   void _applyScrapedData() {
-    if (_scrapedData == null) return;
+    final scrapedData = _scrapedData;
+    if (scrapedData == null) return;
 
     setState(() {
-      if (_scrapedData!.title != null) {
-        _nameController.text = _scrapedData!.title!;
+      final title = scrapedData.title;
+      if (title != null && title.isNotEmpty) {
+        _nameController.text = title;
       }
       
-      if (_scrapedData!.description != null) {
-        _descriptionController.text = _scrapedData!.description!;
+      final description = scrapedData.description;
+      if (description != null && description.isNotEmpty) {
+        _descriptionController.text = description;
       }
       
-      if (_scrapedData!.price != null) {
-        _priceController.text = _scrapedData!.price!.toStringAsFixed(2);
+      final price = scrapedData.price;
+      if (price != null && price > 0) {
+        _priceController.text = price.toStringAsFixed(2);
       }
       
       // Limpa imagem local se houver uma imagem scraped
-      if (_scrapedData!.imageUrl != null && _scrapedData!.imageUrl!.isNotEmpty) {
+      final imageUrl = scrapedData.imageUrl;
+      if (imageUrl != null && imageUrl.isNotEmpty) {
         _imageFile = null;
         _sharedImageBytes = null;
-        _imageUrl = _scrapedData!.imageUrl;
+        _imageUrl = imageUrl;
       }
       
       _showScrapingPreview = false;
@@ -666,28 +674,28 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        if (_scrapedData!.title != null) ...[
+                        if (_scrapedData?.title != null) ...[
                           Text(
                             'Nome: ${_scrapedData!.title}',
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 4),
                         ],
-                        if (_scrapedData!.price != null) ...[
+                        if (_scrapedData?.price != null) ...[
                           Text(
                             'Preço: R\$ ${_scrapedData!.price!.toStringAsFixed(2)}',
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 4),
                         ],
-                        if (_scrapedData!.description != null) ...[
+                        if (_scrapedData?.description != null) ...[
                           Text(
                             'Descrição: ${_scrapedData!.description!.length > 100 ? '${_scrapedData!.description!.substring(0, 100)}...' : _scrapedData!.description}',
                             style: const TextStyle(fontSize: 12),
                           ),
                           const SizedBox(height: 8),
                         ],
-                        if (_scrapedData!.imageUrl != null && _scrapedData!.imageUrl!.isNotEmpty) ...[
+                        if (_scrapedData?.imageUrl != null && _scrapedData!.imageUrl!.isNotEmpty) ...[
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
                             child: Image.network(

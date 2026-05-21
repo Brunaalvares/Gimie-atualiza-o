@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'home_screen.dart';
 import 'add_product_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
+import 'trends_screen.dart';
+import '../services/share_service.dart';
+import '../providers/auth_provider.dart';
+import '../providers/product_provider.dart';
 
 class MainShell extends StatefulWidget {
-  const MainShell({Key? key}) : super(key: key);
+  const MainShell({super.key});
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -13,22 +18,53 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+  bool _checkedPendingShare = false;
 
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
     const SizedBox(), // Placeholder for FAB
-    const SizedBox(), // Placeholder
+    const TrendsScreen(),
     const ProfileScreen(),
   ];
 
-  void _onTabTapped(int index) {
-    if (index == 2) {
-      // Central FAB - open add screen
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_checkedPendingShare) return;
+    _checkedPendingShare = true;
+    _openAddScreenIfSharedContentExists();
+  }
+
+  Future<void> _openAddScreenIfSharedContentExists() async {
+    final sharedContent = await ShareService.instance.getSharedContent();
+    if (!mounted || sharedContent == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const AddProductScreen()),
       );
+    });
+  }
+
+  void _onTabTapped(int index) {
+    if (index == 2) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const AddProductScreen()),
+      );
+    } else if (index == 3) {
+      setState(() {
+        _currentIndex = 3;
+      });
     } else {
+      if (index == 4) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final userId = authProvider.resolvedUserId;
+        if (userId != null && userId.isNotEmpty) {
+          Provider.of<ProductProvider>(context, listen: false).loadUserProducts(userId);
+        }
+      }
       setState(() {
         _currentIndex = index;
       });
@@ -46,7 +82,7 @@ class _MainShellState extends State<MainShell> {
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, -2),
             ),
@@ -63,7 +99,7 @@ class _MainShellState extends State<MainShell> {
                 _buildNavItem(Icons.home_outlined, Icons.home, 0),
                 _buildNavItem(Icons.search, Icons.search, 1),
                 const SizedBox(width: 60), // Space for FAB
-                _buildNavItem(Icons.favorite_border, Icons.favorite, 3),
+                _buildNavItem(Icons.auto_awesome_outlined, Icons.auto_awesome, 3),
                 _buildNavItem(Icons.person_outline, Icons.person, 4),
               ],
             ),

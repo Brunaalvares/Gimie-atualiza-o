@@ -1,0 +1,302 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Gimie — regras alinhadas ao app (utilizadores, produtos, notificações,
+    // reserva de @, curadoria Trends + admins).
+    //
+    // Deploy: firebase deploy --only firestore:rules
+    //
+    // Trends (admin): no Console cria o documento
+    //   admins/{UID_DO_FIREBASE_AUTH}  →  { "active": true }
+    // Só esse UID pode criar/editar/apagar trend_boards e subcoleções.
+    // Storage (imagens trends/) tem regras à parte em storage.rules.
+    // -------------------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function nonEmptyString(v) {
+      return v is string && v.size() > 0;
+    }
+
+    function optionalStringMax(data, key, max) {
+      return !(key in data)
+        || data[key] == null
+        || (data[key] is string && data[key].size() <= max);
+    }
+
+    /// Preço gravado pelo Flutter como double → Firestore pode expor como int ou float.
+    function validPriceField(v) {
+      return (v is int || v is float)
+        && v >= 0
+        && v <= 1000000000;
+    }
+
+    function validUserDocument(data, isCreate) {
+      return data.keys().hasAll([
+            'email', 'name', 'username', 'createdAt', 'followingIds'
+          ])
+        && data.keys().hasOnly([
+            'email', 'name', 'username', 'photoUrl', 'bio', 'birthDate',
+            'createdAt', 'lastLogin', 'followingIds', 'following', 'emptyFolders',
+            'id', 'uid'
+          ])
+        && data.email is string
+        && data.email.size() <= 320
+        && data.name is string
+        && data.name.size() <= 200
+        && data.username is string
+        && data.username.size() <= 64
+        && data.createdAt is timestamp
+        && data.followingIds is list
+        && data.followingIds.size() <= 10000
+        && (!('following' in data)
+            || (data.following is list && data.following.size() <= 10000))
+        && (!('id' in data)
+            || (data.id is string && data.id.size() <= 128))
+        && (!('uid' in data)
+            || (data.uid is string && data.uid.size() <= 128))
+        && (!('emptyFolders' in data)
+            || (data.emptyFolders is list && data.emptyFolders.size() <= 500))
+        && optionalStringMax(data, 'photoUrl', 2000)
+        && optionalStringMax(data, 'bio', 2000)
+        && (!('birthDate' in data) || data.birthDate == null || data.birthDate is timestamp)
+        && (!('lastLogin' in data) || data.lastLogin == null || data.lastLogin is timestamp)
+        && (isCreate || userEmailOk(data));
+    }
+
+    function userEmailOk(data) {
+      return !('email' in data)
+        || data.email == resource.data.email
+        || (request.auth.token.email != null && data.email == request.auth.token.email);
+    }
+
+    function notifPayloadValid() {
+      let d = request.resource.data;
+      let t = d.type;
+      return t is string
+        && d.actorId is string
+        && d.recipientId is string
+        && optionalStringMax(d, 'actorName', 200)
+        && optionalStringMax(d, 'actorUsername', 100)
+        && optionalStringMax(d, 'productName', 500)
+        && optionalStringMax(d, 'productId', 200)
+        && (d.createdAt == null || d.createdAt is timestamp)
+        && (
+          (t == 'follow'
+            && d.keys().hasOnly([
+              'recipientId', 'actorId', 'type',
+              'actorName', 'actorUsername', 'createdAt'
+            ]))
+          || (t == 'like'
+            && d.keys().hasOnly([
+              'recipientId', 'actorId', 'type',
+              'productId', 'productName',
+              'actorName', 'actorUsername', 'createdAt'
+            ])
+            && nonEmptyString(d.productId))
+        );
+    }
+
+    function validProductCreate(d) {
+      return d.keys().hasAll([
+            'name', 'description', 'price', 'imageUrl', 'url',
+            'userId', 'createdAt', 'likes', 'likedBy'
+          ])
+        && d.keys().hasOnly([
+            'name', 'description', 'price', 'priceDisplay', 'imageUrl', 'url',
+            'userId', 'category', 'createdAt', 'likes', 'likedBy'
+          ])
+        && d.name is string && d.name.size() <= 500
+        && d.description is string && d.description.size() <= 10000
+        && validPriceField(d.price)
+        && d.imageUrl is string && d.imageUrl.size() <= 2000
+        && d.url is string && d.url.size() <= 2000
+        && d.userId is string && d.userId == request.auth.uid
+        && d.createdAt is timestamp
+        && d.likes is int && d.likes >= 0 && d.likes <= 1000000
+        && d.likedBy is list && d.likedBy.size() <= 100000
+        && d.likes == d.likedBy.size()
+        && optionalStringMax(d, 'category', 200)
+        && optionalStringMax(d, 'priceDisplay', 200);
+    }
+
+    function productUpdateAllowed() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let ownerId = before.userId;
+      let uid = request.auth.uid;
+
+      return after.userId == ownerId
+        && (
+          (ownerId == uid)
+          || onlyLikeFieldsChanged(before, after)
+        );
+    }
+
+    function onlyLikeFieldsChanged(before, after) {
+      return before.diff(after).affectedKeys().hasOnly(['likedBy', 'likes'])
+        && after.likedBy is list
+        && after.likedBy.size() <= 100000
+        && after.likes is int
+        && after.likes >= 0
+        && after.likes <= 1000000
+        && after.likes == after.likedBy.size();
+    }
+
+    function trendAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
+    function trendSortOrderOk(n) {
+      return n is int && n >= 0 && n <= 10000000;
+    }
+
+    function validTrendBoardDoc(d) {
+      return d.keys().hasOnly(['title', 'sortOrder', 'updatedAt'])
+        && d.title is string && d.title.size() <= 200
+        && trendSortOrderOk(d.sortOrder)
+        && d.updatedAt is timestamp;
+    }
+
+    function validTrendMoodDoc(d) {
+      return d.keys().hasOnly(['imageUrl', 'sortOrder', 'createdAt'])
+        && d.imageUrl is string && d.imageUrl.size() <= 2000
+        && trendSortOrderOk(d.sortOrder)
+        && d.createdAt is timestamp;
+    }
+
+    function validTrendProductDoc(d) {
+      return d.keys().hasOnly(['title', 'priceDisplay', 'imageUrl', 'linkUrl', 'sortOrder', 'createdAt'])
+        && d.title is string && d.title.size() <= 300
+        && d.priceDisplay is string && d.priceDisplay.size() <= 120
+        && d.imageUrl is string && d.imageUrl.size() <= 2000
+        && d.linkUrl is string && d.linkUrl.size() <= 2000
+        && trendSortOrderOk(d.sortOrder)
+        && d.createdAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // usernames/{handle} — mapa handle → uid (get público para registo/disponibilidade)
+    // -------------------------------------------------------------------------
+    match /usernames/{uname} {
+      allow get: if true;
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid is string
+        && request.resource.data.uid == request.auth.uid;
+
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
+
+      allow update: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // users/{userId}
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+
+      allow get: if signedIn();
+
+      allow list: if signedIn();
+
+      allow create: if isSelf(userId)
+        && validUserDocument(request.resource.data, true);
+
+      allow update: if isSelf(userId)
+        && (!resource.data.keys().hasAll(['createdAt'])
+            || request.resource.data.createdAt == resource.data.createdAt)
+        && validUserDocument(request.resource.data, false);
+
+      allow delete: if isSelf(userId);
+
+      match /notifications/{notifId} {
+
+        allow get, list: if isSelf(userId);
+
+        allow delete: if isSelf(userId);
+
+        allow update: if false;
+
+        allow create: if signedIn()
+          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.recipientId == userId
+          && request.resource.data.recipientId != request.auth.uid
+          && notifPayloadValid();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // admins/{uid} — só leitura do próprio doc (app verifica isCurrentUserAdmin)
+    // Escrita apenas via Console / Admin SDK.
+    // -------------------------------------------------------------------------
+    match /admins/{adminId} {
+      allow get: if signedIn() && request.auth.uid == adminId;
+      allow list, create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // trend_boards — leitura: qualquer utilizador autenticado (aba Trends).
+    // Escrita: apenas trendAdmin().
+    // -------------------------------------------------------------------------
+    match /trend_boards/{boardId} {
+      allow read: if signedIn();
+      allow create: if trendAdmin() && validTrendBoardDoc(request.resource.data);
+      allow update: if trendAdmin() && validTrendBoardDoc(request.resource.data);
+      allow delete: if trendAdmin();
+
+      match /mood_images/{moodId} {
+        allow read: if signedIn();
+        allow create: if trendAdmin() && validTrendMoodDoc(request.resource.data);
+        allow update: if trendAdmin() && validTrendMoodDoc(request.resource.data);
+        allow delete: if trendAdmin();
+      }
+
+      match /trend_products/{productId} {
+        allow read: if signedIn();
+        allow create: if trendAdmin() && validTrendProductDoc(request.resource.data);
+        allow update: if trendAdmin() && validTrendProductDoc(request.resource.data);
+        allow delete: if trendAdmin();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // products/{productId}
+    // -------------------------------------------------------------------------
+    match /products/{productId} {
+
+      allow get: if signedIn();
+
+      allow list: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && validProductCreate(request.resource.data);
+
+      allow update: if signedIn()
+        && productUpdateAllowed();
+
+      allow delete: if signedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // Nenhuma outra coleção
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-platform :ios, '12.0'
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -40,18 +40,49 @@ target 'Runner' do
   pod 'Firebase/Analytics'
 end
 
-target 'ShareExtension' do
-  use_frameworks!
-  use_modular_headers!
-end
-
 post_install do |installer|
+  # Patch gRPC pods: CallSeqFactory is a regular static function, not a template.
+  # Clang rejects 'Traits::template CallSeqFactory' when the name is not a template.
+  pods_root = File.join(File.dirname(File.realpath(__FILE__)), 'Pods')
+  ['gRPC-Core', 'gRPC-C++'].each do |pod_name|
+    basic_seq = File.join(pods_root, pod_name, 'src/core/lib/promise/detail/basic_seq.h')
+    if File.exist?(basic_seq)
+      content = File.read(basic_seq)
+      patched = content.gsub('Traits::template CallSeqFactory', 'Traits::CallSeqFactory')
+      if patched != content
+        FileUtils.chmod('u+w', basic_seq)
+        File.write(basic_seq, patched)
+        puts "✅ Patched #{pod_name}/basic_seq.h"
+      else
+        puts "ℹ️  #{pod_name}/basic_seq.h already patched"
+      end
+    else
+      puts "⚠️  #{basic_seq} not found"
+    end
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
-    
+
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['ENABLE_BITCODE'] = 'NO'
+
+      # All pods need at least C++17 (required by gRPC-Core/Firebase)
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      # Allow Firebase.h (non-modular header) inside framework modules
+      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+    end
+
+    # BoringSSL-GRPC passes -GCC_WARN_INHIBIT_ALL_WARNINGS which clang
+    # misinterprets as the unsupported -G flag on x86_64 iOS simulator
+    if target.name == 'BoringSSL-GRPC'
+      target.source_build_phase.files.each do |file|
+        if file.settings && file.settings['COMPILER_FLAGS']
+          file.settings['COMPILER_FLAGS'] =
+            file.settings['COMPILER_FLAGS'].gsub('-GCC_WARN_INHIBIT_ALL_WARNINGS', '-w')
+        end
+      end
     end
   end
 end

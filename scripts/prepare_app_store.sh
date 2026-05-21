@@ -124,8 +124,8 @@ print_step "Verificando arquivos importantes..."
 
 IMPORTANT_FILES=(
     "ios/Runner/Info.plist"
-    "ios/ShareExtension/Info.plist"
-    "ios/ShareExtension/ShareViewController.swift"
+    "ios/shareextentionxcode/Info.plist"
+    "ios/shareextentionxcode/ShareViewController.swift"
     "ios/Runner/AppDelegate.swift"
     "lib/services/share_service.dart"
 )

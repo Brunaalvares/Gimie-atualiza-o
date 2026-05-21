@@ -2,25 +2,42 @@
   "project_info": {
     "project_number": "669182239244",
     "project_id": "gimie-launch",
-    "storage_bucket": "gimie-launch.appspot.com"
+    "storage_bucket": "gimie-launch.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:669182239244:android:YOUR_ANDROID_APP_ID",
+        "mobilesdk_app_id": "1:669182239244:android:d082b80f6e19c152a44429",
         "android_client_info": {
           "package_name": "com.gimie.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "669182239244-j7ne5stb64cj1j8hnm9s0bbk1980be7a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "YOUR_ANDROID_API_KEY_HERE"
+          "current_key": "AIzaSyCZ00i51yeiAIDP0PoMNzZzvA4VMjojrc4"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "669182239244-j7ne5stb64cj1j8hnm9s0bbk1980be7a.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "669182239244-5jrv2h5b0s4g03r3fr58vkr7uddr8mnb.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.gimie.gimi"
+              }
+            }
+          ]
         }
       }
     }

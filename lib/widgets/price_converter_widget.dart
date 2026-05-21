@@ -8,11 +8,11 @@ class PriceConverterWidget extends StatefulWidget {
   final Function(double, String)? onCurrencyChanged;
 
   const PriceConverterWidget({
-    Key? key,
+    super.key,
     required this.price,
     required this.originalCurrency,
     this.onCurrencyChanged,
-  }) : super(key: key);
+  });
 
   @override
   State<PriceConverterWidget> createState() => _PriceConverterWidgetState();
@@ -29,6 +29,22 @@ class _PriceConverterWidgetState extends State<PriceConverterWidget> {
     super.initState();
     _selectedCurrency = widget.originalCurrency;
     _convertedPrice = widget.price;
+  }
+
+  @override
+  void didUpdateWidget(PriceConverterWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.price != widget.price ||
+        oldWidget.originalCurrency != widget.originalCurrency) {
+      if (oldWidget.originalCurrency != widget.originalCurrency) {
+        _selectedCurrency = widget.originalCurrency;
+      }
+      if (_selectedCurrency == widget.originalCurrency) {
+        setState(() => _convertedPrice = widget.price);
+      } else {
+        _convertPrice(_selectedCurrency);
+      }
+    }
   }
 
   Future<void> _convertPrice(String toCurrency) async {
@@ -115,7 +131,7 @@ class _PriceConverterWidgetState extends State<PriceConverterWidget> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _selectedCurrency,
+                  initialValue: _selectedCurrency,
                   decoration: const InputDecoration(
                     contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     border: OutlineInputBorder(),

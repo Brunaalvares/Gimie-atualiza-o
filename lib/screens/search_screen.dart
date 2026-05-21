@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/user_model.dart';
 import '../providers/product_provider.dart';
 import '../providers/auth_provider.dart';
+import 'user_profile_screen.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({Key? key}) : super(key: key);
+  const SearchScreen({super.key});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -12,15 +16,55 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _searchController = TextEditingController();
+  Timer? _debounce;
+  List<UserModel> _userResults = const [];
+  bool _isSearchingUsers = false;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   void _performSearch(String query) {
     Provider.of<ProductProvider>(context, listen: false).searchProducts(query);
+    _searchUsers(query);
+  }
+
+  Future<void> _searchUsers(String query) async {
+    final trimmedQuery = query.trim();
+    if (trimmedQuery.length < 2) {
+      if (!mounted) return;
+      setState(() {
+        _isSearchingUsers = false;
+        _userResults = const [];
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearchingUsers = true;
+    });
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final users = await authProvider.searchUsersToFollow(trimmedQuery);
+    if (!mounted) return;
+    setState(() {
+      _userResults = users;
+      _isSearchingUsers = false;
+    });
+  }
+
+  void _onQueryChanged(String value) {
+    setState(() {});
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      if (value.length >= 2 || value.isEmpty) {
+        _performSearch(value);
+      }
+    });
   }
 
   @override
@@ -45,7 +89,7 @@ class _SearchScreenState extends State<SearchScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Buscar produtos...',
+                hintText: 'Buscar produtos e usuários...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -53,6 +97,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         onPressed: () {
                           _searchController.clear();
                           _performSearch('');
+                          setState(() {});
                         },
                       )
                     : null,
@@ -60,22 +105,23 @@ class _SearchScreenState extends State<SearchScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onChanged: (value) {
-                setState(() {});
-                if (value.length >= 3 || value.isEmpty) {
-                  _performSearch(value);
-                }
-              },
+              onChanged: _onQueryChanged,
             ),
           ),
           Expanded(
-            child: Consumer<ProductProvider>(
-              builder: (context, productProvider, _) {
+            child: Consumer2<ProductProvider, AuthProvider>(
+              builder: (context, productProvider, authProvider, _) {
                 if (productProvider.isLoading) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                if (productProvider.products.isEmpty) {
+                final showEmptyState =
+                    _searchController.text.trim().isNotEmpty &&
+                    productProvider.products.isEmpty &&
+                    !_isSearchingUsers &&
+                    _userResults.isEmpty;
+
+                if (showEmptyState) {
                   return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -83,7 +129,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         Icon(Icons.search_off, size: 64, color: Colors.grey),
                         SizedBox(height: 16),
                         Text(
-                          'Nenhum produto encontrado',
+                          'Nenhum resultado encontrado',
                           style: TextStyle(fontSize: 18, color: Colors.grey),
                         ),
                       ],
@@ -91,10 +137,102 @@ class _SearchScreenState extends State<SearchScreen> {
                   );
                 }
 
+                final itemCount = productProvider.products.length +
+                    (_isSearchingUsers || _userResults.isNotEmpty ? 1 : 0);
+
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: productProvider.products.length,
+                  itemCount: itemCount,
                   itemBuilder: (context, index) {
+                    if (_isSearchingUsers || _userResults.isNotEmpty) {
+                      if (index == 0) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                'Usuários',
+                                style: TextStyle(
+                                  fontFamily: 'Raleway',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 18,
+                                  color: Color(0xFF6B2C5C),
+                                ),
+                              ),
+                            ),
+                            if (_isSearchingUsers)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 12),
+                                child: LinearProgressIndicator(minHeight: 2),
+                              )
+                            else if (_userResults.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  'Nenhum usuário encontrado',
+                                  style: TextStyle(
+                                    fontFamily: 'Roboto',
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              )
+                            else
+                              ..._userResults.map((user) {
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  child: ListTile(
+                                    leading: CircleAvatar(
+                                      backgroundColor: const Color(0xFF8B7FB8),
+                                      backgroundImage: user.photoUrl != null
+                                          ? NetworkImage(user.photoUrl!)
+                                          : null,
+                                      child: user.photoUrl == null
+                                          ? Text(
+                                              user.name.isNotEmpty
+                                                  ? user.name[0].toUpperCase()
+                                                  : '?',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            )
+                                          : null,
+                                    ),
+                                    title: Text(user.name),
+                                    subtitle: Text('@${user.username}'),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () async {
+                                      await Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => UserProfileScreen(user: user),
+                                        ),
+                                      );
+                                      if (!mounted) return;
+                                      _searchUsers(_searchController.text);
+                                    },
+                                  ),
+                                );
+                              }),
+                            if (productProvider.products.isNotEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8, bottom: 8),
+                                child: Text(
+                                  'Produtos',
+                                  style: TextStyle(
+                                    fontFamily: 'Raleway',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 18,
+                                    color: Color(0xFF6B2C5C),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      }
+                      index -= 1;
+                    }
+
                     final product = productProvider.products[index];
                     return Card(
                       margin: const EdgeInsets.only(bottom: 16),
@@ -113,7 +251,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         trailing: IconButton(
                           icon: Icon(
                             product.likedBy.contains(
-                              Provider.of<AuthProvider>(context).currentUser?.id,
+                              authProvider.currentUser?.id,
                             )
                                 ? Icons.favorite
                                 : Icons.favorite_border,

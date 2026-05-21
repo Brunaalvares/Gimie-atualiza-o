@@ -1,11 +1,96 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
+import 'main_shell.dart';
 import 'login_screen.dart';
 
-class SplashScreen extends StatelessWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  static const String _onboardingSeenKey = 'onboarding_seen_v1';
+  bool _checkingFirstAccess = true;
+  bool _showOnboarding = false;
+  bool _isNavigating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeEntryFlow();
+  }
+
+  Future<void> _initializeEntryFlow() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seenOnboarding = prefs.getBool(_onboardingSeenKey) ?? false;
+
+    if (!mounted) return;
+
+    if (seenOnboarding) {
+      setState(() {
+        _checkingFirstAccess = false;
+      });
+      await _goToNextScreen();
+      return;
+    }
+
+    setState(() {
+      _checkingFirstAccess = false;
+      _showOnboarding = true;
+    });
+  }
+
+  Future<void> _goToNextScreen() async {
+    if (_isNavigating || !mounted) return;
+    _isNavigating = true;
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    var attempts = 0;
+    while (!authProvider.isSessionInitialized && attempts < 25 && mounted) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      attempts++;
+    }
+    if (!mounted) return;
+
+    final shouldGoToHome =
+        authProvider.rememberMe && authProvider.isAuthenticated;
+
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => shouldGoToHome ? const MainShell() : const LoginScreen(),
+      ),
+    );
+  }
+
+  Future<void> _handleStart() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingSeenKey, true);
+    if (!mounted) return;
+    await _goToNextScreen();
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_checkingFirstAccess) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF8B7FB8),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFFF5F3E8)),
+        ),
+      );
+    }
+
+    if (!_showOnboarding) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF8B7FB8),
+        body: SizedBox.expand(),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF8B7FB8),
       body: SafeArea(
@@ -19,6 +104,7 @@ class SplashScreen extends StatelessWidget {
                   const Text(
                     'Gimie',
                     style: TextStyle(
+                      fontFamily: 'Raleway',
                       fontSize: 72,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFFF5F3E8),
@@ -28,10 +114,12 @@ class SplashScreen extends StatelessWidget {
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 40),
                     child: Text(
-                      'Connecting people through\ncommon wishes',
+                      'Conectando pessoas e produtos',
                       textAlign: TextAlign.center,
                       style: TextStyle(
+                        fontFamily: 'Roboto',
                         fontSize: 20,
+                        fontWeight: FontWeight.w400,
                         color: Color(0xFFF5F3E8),
                       ),
                     ),
@@ -54,7 +142,7 @@ class SplashScreen extends StatelessWidget {
                         width: 12,
                         height: 12,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF5F3E8).withOpacity(0.5),
+                          color: const Color(0xFFF5F3E8).withValues(alpha: 0.5),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -63,7 +151,7 @@ class SplashScreen extends StatelessWidget {
                         width: 12,
                         height: 12,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF5F3E8).withOpacity(0.5),
+                          color: const Color(0xFFF5F3E8).withValues(alpha: 0.5),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -78,11 +166,7 @@ class SplashScreen extends StatelessWidget {
               child: Align(
                 alignment: Alignment.bottomRight,
                 child: GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    );
-                  },
+                  onTap: _handleStart,
                   child: Container(
                     width: 200,
                     height: 200,
@@ -95,24 +179,28 @@ class SplashScreen extends StatelessWidget {
                       ),
                     ),
                     child: const Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Next',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF6B2C5C),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Começar',
+                              style: TextStyle(
+                                fontFamily: 'Raleway',
+                                fontSize: 28,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6B2C5C),
+                              ),
                             ),
-                          ),
-                          SizedBox(width: 8),
-                          Icon(
-                            Icons.arrow_forward,
-                            color: Color(0xFF6B2C5C),
-                            size: 28,
-                          ),
-                        ],
+                            SizedBox(width: 8),
+                            Icon(
+                              Icons.arrow_forward,
+                              color: Color(0xFF6B2C5C),
+                              size: 28,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

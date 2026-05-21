@@ -2,6 +2,17 @@ class ApiConfig {
   // API Base URL - Gimie API 2.0 on Vercel
   static const String baseUrl = 'https://api2gimie.vercel.app';
   
+  // Rotas confirmadas na API 2.0 atual
+  // Observacao: endpoints de auth/users nao estao publicados neste deploy.
+  static const List<String> api2AvailableEndpoints = [
+    '/health',
+    '/api/products',
+    '/api/products/exchange-rates',
+    '/api/products/convert',
+    '/api/products/extract',
+    '/api/products/suggestions',
+  ];
+  
   // API Endpoints
   static const String loginEndpoint = '/api/auth/login';
   static const String registerEndpoint = '/api/auth/register';
@@ -31,4 +42,8 @@ class ApiConfig {
     ...headers,
     'Authorization': 'Bearer $token',
   };
+
+  static bool isEndpointAvailableInApi2(String endpoint) {
+    return api2AvailableEndpoints.any((known) => endpoint.startsWith(known));
+  }
 }

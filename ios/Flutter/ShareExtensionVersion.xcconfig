@@ -1,0 +1,2 @@
+// Versão alinhada ao pubspec (via Generated.xcconfig). Usado pelo target da Share Extension.
+#include "Generated.xcconfig"

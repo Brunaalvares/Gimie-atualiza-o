@@ -8,10 +8,10 @@ class ProductSuggestionsWidget extends StatefulWidget {
   final Function(Product) onProductSelected;
 
   const ProductSuggestionsWidget({
-    Key? key,
+    super.key,
     required this.category,
     required this.onProductSelected,
-  }) : super(key: key);
+  });
 
   @override
   State<ProductSuggestionsWidget> createState() => _ProductSuggestionsWidgetState();

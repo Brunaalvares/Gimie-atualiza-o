@@ -1,14 +1,12 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/debug_helper.dart';
 
 class ShareService {
-  static const String _appGroupId = 'group.com.gimie.shareextension';
-  static const String _sharedKey = 'ShareKey';
   static const MethodChannel _channel = MethodChannel('com.gimie.share');
 
   static ShareService? _instance;
@@ -18,7 +16,6 @@ class ShareService {
 
   bool _isInitialized = false;
 
-  /// Inicializa o serviço de compartilhamento
   Future<void> initialize() async {
     if (_isInitialized) {
       DebugHelper.log('ShareService already initialized', 'SHARE');
@@ -28,11 +25,9 @@ class ShareService {
     try {
       DebugHelper.log('Initializing ShareService', 'SHARE');
 
-      if (Platform.isIOS) {
-        // Configura handler para quando o app é aberto via URL scheme
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
         _channel.setMethodCallHandler(_handleNativeCall);
-
-        // Verifica se há conteúdo pendente da Share Extension
+        await Future<void>.delayed(const Duration(milliseconds: 250));
         await _checkForPendingSharedContent();
       }
 
@@ -43,7 +38,6 @@ class ShareService {
     }
   }
 
-  /// Recebe chamadas do canal nativo iOS (AppDelegate)
   Future<dynamic> _handleNativeCall(MethodCall call) async {
     try {
       if (call.method == 'onSharedContent') {
@@ -55,7 +49,6 @@ class ShareService {
     }
   }
 
-  /// Verifica se há conteúdo compartilhado pendente no App Group (iOS)
   Future<void> _checkForPendingSharedContent() async {
     try {
       final sharedData = await _getSharedDataFromAppGroup();
@@ -72,15 +65,16 @@ class ShareService {
     }
   }
 
-  /// Obtém dados do App Group via canal nativo
   Future<Map<String, dynamic>?> _getSharedDataFromAppGroup() async {
-    if (!Platform.isIOS) return null;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
 
     try {
       final result = await _channel.invokeMethod<Map>('getSharedData');
       if (result != null) {
         return Map<String, dynamic>.from(result);
       }
+    } on MissingPluginException {
+      return null;
     } catch (e) {
       DebugHelper.logError('Error reading App Group data', e);
     }
@@ -88,19 +82,19 @@ class ShareService {
     return null;
   }
 
-  /// Limpa dados do App Group via canal nativo
   Future<void> _clearNativeSharedData() async {
-    if (!Platform.isIOS) return;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
 
     try {
       await _channel.invokeMethod('clearSharedData');
       DebugHelper.log('Native shared data cleared', 'SHARE');
+    } on MissingPluginException {
+      return;
     } catch (e) {
       DebugHelper.logError('Error clearing native shared data', e);
     }
   }
 
-  /// Processa dados recebidos da Share Extension
   Future<void> _processSharedData(Map<String, dynamic> data) async {
     final type = data['type'] as String?;
     DebugHelper.log('Processing shared data of type: $type', 'SHARE');
@@ -109,16 +103,15 @@ class ShareService {
       case 'url':
         final url = data['url'] as String?;
         if (url != null && url.isNotEmpty) {
-          await _saveSharedContent(url: url);
+          await _saveSharedContent(url: _stripUtmQueryParameters(url));
         }
         break;
 
       case 'text':
         final text = data['text'] as String?;
         if (text != null && text.isNotEmpty) {
-          // Verifica se o texto é uma URL
           if (_isURL(text)) {
-            await _saveSharedContent(url: text);
+            await _saveSharedContent(url: _stripUtmQueryParameters(text));
           } else {
             await _saveSharedContent(text: text);
           }
@@ -142,7 +135,6 @@ class ShareService {
     }
   }
 
-  /// Salva conteúdo compartilhado no SharedPreferences
   Future<void> _saveSharedContent({
     String? text,
     String? url,
@@ -151,7 +143,6 @@ class ShareService {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Limpa dados anteriores
       await clearSharedContent();
 
       bool hasContent = false;
@@ -183,7 +174,6 @@ class ShareService {
     }
   }
 
-  /// Obtém conteúdo compartilhado salvo (chamado pela UI)
   Future<Map<String, dynamic>?> getSharedContent() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -221,7 +211,6 @@ class ShareService {
     }
   }
 
-  /// Limpa conteúdo compartilhado do SharedPreferences
   Future<void> clearSharedContent() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -235,7 +224,6 @@ class ShareService {
     }
   }
 
-  /// Verifica se uma string é uma URL válida
   bool _isURL(String text) {
     try {
       final uri = Uri.tryParse(text.trim());
@@ -247,7 +235,19 @@ class ShareService {
     }
   }
 
-  /// Libera recursos
+  /// Remove query keys used em campanhas (utm_source, utm_medium, …).
+  String _stripUtmQueryParameters(String input) {
+    final trimmed = input.trim();
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasQuery) return trimmed;
+
+    final qp = Map<String, String>.from(uri.queryParameters);
+    qp.removeWhere((k, _) => k.toLowerCase().startsWith('utm_'));
+    if (qp.length == uri.queryParameters.length) return trimmed;
+
+    return uri.replace(queryParameters: qp).toString();
+  }
+
   void dispose() {
     DebugHelper.log('Disposing ShareService', 'SHARE');
     _isInitialized = false;

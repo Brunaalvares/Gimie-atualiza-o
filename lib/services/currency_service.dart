@@ -32,8 +32,9 @@ class CurrencyService {
         final data = jsonDecode(response.body);
         
         if (data['success'] == true && data['data'] != null) {
-          final rates = Map<String, double>.from(
-            data['data']['rates'].map((key, value) => MapEntry(key, value.toDouble()))
+          final rawRates = Map<String, dynamic>.from(data['data']['rates'] ?? {});
+          final rates = rawRates.map<String, double>(
+            (key, value) => MapEntry(key, (value as num?)?.toDouble() ?? 0.0),
           );
           
           DebugHelper.log('Successfully got exchange rates', 'CURRENCY');

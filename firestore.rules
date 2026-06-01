@@ -78,6 +78,14 @@ service cloud.firestore {
         || (request.auth.token.email != null && data.email == request.auth.token.email);
     }
 
+    /// Atualização só de pastas vazias (perfil) — não exige revalidar o doc inteiro.
+    function onlyEmptyFoldersChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emptyFolders'])
+        && (!('emptyFolders' in request.resource.data)
+            || (request.resource.data.emptyFolders is list
+                && request.resource.data.emptyFolders.size() <= 500));
+    }
+
     function notifPayloadValid() {
       let d = request.resource.data;
       let t = d.type;
@@ -216,9 +224,14 @@ service cloud.firestore {
         && validUserDocument(request.resource.data, true);
 
       allow update: if isSelf(userId)
-        && (!resource.data.keys().hasAll(['createdAt'])
-            || request.resource.data.createdAt == resource.data.createdAt)
-        && validUserDocument(request.resource.data, false);
+        && (
+          onlyEmptyFoldersChanged()
+          || (
+            (!resource.data.keys().hasAll(['createdAt'])
+                || request.resource.data.createdAt == resource.data.createdAt)
+            && validUserDocument(request.resource.data, false)
+          )
+        );
 
       allow delete: if isSelf(userId);
 

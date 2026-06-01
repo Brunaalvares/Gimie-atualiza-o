@@ -456,18 +456,38 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final fresh = await _firebaseService.getUserDocument(_currentUser!.id);
+      var fresh = await _firebaseService.getUserDocument(_currentUser!.id);
       if (fresh == null) {
-        _errorMessage = 'Conta não encontrada. Faça login novamente.';
-        _isLoading = false;
-        notifyListeners();
-        return false;
+        final current = _currentUser!;
+        final firebaseEmail = _firebaseService.currentUser?.email?.trim() ?? '';
+        final userToCreate = current.email.trim().isEmpty && firebaseEmail.isNotEmpty
+            ? current.copyWith(email: firebaseEmail)
+            : current;
+        if (userToCreate.email.trim().isEmpty) {
+          _errorMessage =
+              'Não foi possível validar o e-mail da conta. Faça login novamente.';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+        await _firebaseService.createUserDocument(userToCreate);
+        fresh = userToCreate;
+        _currentUser = userToCreate;
       }
 
       final normalized = _normalizeEmptyFolderList(emptyFolders);
-      await _firebaseService.updateUserDocument(_currentUser!.id, {
-        'emptyFolders': normalized,
-      });
+      final userId = _currentUser!.id;
+
+      try {
+        await _firebaseService.updateUserEmptyFolders(userId, normalized);
+      } catch (_) {
+        await _repairUserDocumentForEmptyFolders(
+          userId: userId,
+          fresh: fresh,
+          normalizedEmptyFolders: normalized,
+        );
+      }
+
       _currentUser = _currentUser!.copyWith(emptyFolders: normalized);
       _isLoading = false;
       notifyListeners();
@@ -478,6 +498,38 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  Future<void> _repairUserDocumentForEmptyFolders({
+    required String userId,
+    required UserModel fresh,
+    required List<String> normalizedEmptyFolders,
+  }) async {
+    final current = _currentUser!;
+    final firebaseEmail = _firebaseService.currentUser?.email?.trim() ?? '';
+    final ensuredEmail =
+        fresh.email.trim().isNotEmpty ? fresh.email.trim() : firebaseEmail;
+    if (ensuredEmail.isEmpty) {
+      throw Exception('missing_email');
+    }
+
+    final ensuredName =
+        fresh.name.trim().isNotEmpty ? fresh.name.trim() : current.name.trim();
+    final ensuredUsername = fresh.username.trim().isNotEmpty
+        ? fresh.username.trim()
+        : current.username.trim();
+
+    await _firebaseService.updateUserDocument(userId, {
+      // Mantém campos obrigatórios para contas antigas passarem nas regras.
+      'email': ensuredEmail,
+      'name': ensuredName.isNotEmpty ? ensuredName : 'Usuário',
+      'username': ensuredUsername.isNotEmpty
+          ? ensuredUsername
+          : 'user_${current.id.substring(0, 6)}',
+      'createdAt': fresh.createdAt,
+      'followingIds': List<String>.from(fresh.followingIds),
+      'emptyFolders': normalizedEmptyFolders,
+    });
   }
 
   Future<List<UserModel>> searchUsersToFollow(String query) async {
@@ -552,6 +604,9 @@ class AuthProvider extends ChangeNotifier {
 
     if (errorText.contains('username_taken')) {
       return 'Esse @ já está em uso. Escolha outro username.';
+    }
+    if (errorText.contains('missing_email')) {
+      return 'Não foi possível validar o e-mail da conta. Faça login novamente.';
     }
 
     if (errorText.contains('user-not-found')) {

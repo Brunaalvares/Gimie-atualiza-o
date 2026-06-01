@@ -262,6 +262,20 @@ class FirebaseService {
     });
   }
 
+  /// Atualiza apenas `emptyFolders` (pastas vazias no perfil).
+  Future<void> updateUserEmptyFolders(
+    String userId,
+    List<String> emptyFolders,
+  ) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'emptyFolders': emptyFolders,
+      });
+    } catch (e) {
+      throw Exception('Update empty folders error: $e');
+    }
+  }
+
   Future<void> updateUserDocument(
     String userId,
     Map<String, dynamic> data, {

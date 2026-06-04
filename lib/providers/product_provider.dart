@@ -264,7 +264,7 @@ class ProductProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Erro ao salvar produto na sua pasta';
+      _errorMessage = _mapDataWriteError(e, 'Erro ao salvar produto na sua pasta');
       notifyListeners();
       return false;
     }

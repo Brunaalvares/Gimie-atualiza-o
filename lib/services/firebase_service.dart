@@ -532,12 +532,23 @@ class FirebaseService {
 
   // Firestore - Product Methods
   Future<String> createProduct(Product product) async {
+    final authUid = _auth.currentUser?.uid;
     try {
+      if (authUid == null || authUid.isEmpty) {
+        throw Exception('auth-required');
+      }
+
       final payload = product.toFirestore();
+      // Always persist products with the currently authenticated uid.
+      // This avoids permission issues when a stale local id is passed.
+      payload['userId'] = authUid;
       final docRef = await _firestore.collection('products').add(payload);
       return docRef.id;
     } catch (e) {
       final errorText = e.toString();
+      if (errorText.contains('auth-required')) {
+        throw Exception('Create product error: auth-required');
+      }
       if ((errorText.contains('permission-denied') ||
               errorText.contains('PERMISSION_DENIED')) &&
           product.priceDisplay != null &&
@@ -545,7 +556,8 @@ class FirebaseService {
         // Backward-compatible fallback for stricter rules that still
         // don't allow new fields such as priceDisplay.
         final legacyPayload = Map<String, dynamic>.from(product.toFirestore())
-          ..remove('priceDisplay');
+          ..remove('priceDisplay')
+          ..['userId'] = authUid;
         final docRef =
             await _firestore.collection('products').add(legacyPayload);
         return docRef.id;

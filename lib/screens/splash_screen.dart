@@ -166,6 +166,7 @@ class _SplashScreenState extends State<SplashScreen> {
               child: Align(
                 alignment: Alignment.bottomRight,
                 child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: _handleStart,
                   child: Container(
                     width: 200,

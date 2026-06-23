@@ -17,6 +17,7 @@ class _SplashScreenState extends State<SplashScreen> {
   bool _checkingFirstAccess = true;
   bool _showOnboarding = false;
   bool _isNavigating = false;
+  bool _isStarting = false;
 
   @override
   void initState() {
@@ -67,8 +68,18 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _handleStart() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_onboardingSeenKey, true);
+    if (_isStarting || _isNavigating) return;
+    setState(() {
+      _isStarting = true;
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_onboardingSeenKey, true);
+    } catch (_) {
+      // If local persistence fails, still let user continue.
+    }
+
     if (!mounted) return;
     await _goToNextScreen();
   }
@@ -160,48 +171,64 @@ class _SplashScreenState extends State<SplashScreen> {
                 ],
               ),
             ),
-            // Next Button
+            // Start button
             Padding(
               padding: const EdgeInsets.only(right: 40, bottom: 40),
               child: Align(
                 alignment: Alignment.bottomRight,
-                child: GestureDetector(
-                  onTap: _handleStart,
-                  child: Container(
+                child: Semantics(
+                  button: true,
+                  label: 'Começar',
+                  child: SizedBox(
                     width: 200,
                     height: 200,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF5F3E8),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(100),
-                        topRight: Radius.circular(100),
-                        bottomLeft: Radius.circular(100),
-                      ),
-                    ),
-                    child: const Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Começar',
-                              style: TextStyle(
-                                fontFamily: 'Raleway',
-                                fontSize: 28,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF6B2C5C),
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(
-                              Icons.arrow_forward,
-                              color: Color(0xFF6B2C5C),
-                              size: 28,
-                            ),
-                          ],
+                    child: ElevatedButton(
+                      onPressed: _isStarting ? null : _handleStart,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF5F3E8),
+                        foregroundColor: const Color(0xFF6B2C5C),
+                        elevation: 0,
+                        padding: EdgeInsets.zero,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(100),
+                            topRight: Radius.circular(100),
+                            bottomLeft: Radius.circular(100),
+                          ),
                         ),
                       ),
+                      child: _isStarting
+                          ? const SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                color: Color(0xFF6B2C5C),
+                              ),
+                            )
+                          : const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Começar',
+                                    style: TextStyle(
+                                      fontFamily: 'Raleway',
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF6B2C5C),
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Icon(
+                                    Icons.arrow_forward,
+                                    color: Color(0xFF6B2C5C),
+                                    size: 28,
+                                  ),
+                                ],
+                              ),
+                            ),
                     ),
                   ),
                 ),

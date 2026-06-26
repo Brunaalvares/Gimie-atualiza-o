@@ -838,14 +838,21 @@ class FirebaseService {
 
   Future<List<Product>> getProductsFromFollowedUsers(
       List<String> followedUserIds) async {
-    try {
-      if (followedUserIds.isEmpty) return [];
+    if (followedUserIds.isEmpty) return [];
 
+    final sanitizedIds = followedUserIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    if (sanitizedIds.isEmpty) return [];
+
+    try {
       const maxWhereInItems = 10;
       final allProducts = <Product>[];
 
-      for (int i = 0; i < followedUserIds.length; i += maxWhereInItems) {
-        final chunk = followedUserIds.skip(i).take(maxWhereInItems).toList();
+      for (int i = 0; i < sanitizedIds.length; i += maxWhereInItems) {
+        final chunk = sanitizedIds.skip(i).take(maxWhereInItems).toList();
 
         final snapshot = await _firestore
             .collection('products')
@@ -859,10 +866,27 @@ class FirebaseService {
         );
       }
 
-      allProducts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return allProducts;
+      final uniqueById = <String, Product>{
+        for (final product in allProducts) product.id: product,
+      };
+      final deduped = uniqueById.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return deduped;
     } catch (e) {
-      throw Exception('Get followed users products error: $e');
+      // Fallback when batched query is blocked by missing indexes/rules.
+      try {
+        final allProducts = <Product>[];
+        for (final followedId in sanitizedIds) {
+          final userProducts = await getUserProducts(followedId);
+          allProducts.addAll(userProducts);
+        }
+        allProducts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return allProducts;
+      } catch (fallbackError) {
+        throw Exception(
+          'Get followed users products error: $e | fallback error: $fallbackError',
+        );
+      }
     }
   }
 

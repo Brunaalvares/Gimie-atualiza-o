@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/user_avatar.dart';
 import 'user_profile_screen.dart';
 
 class FollowUsersScreen extends StatefulWidget {
@@ -198,23 +199,14 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
                                     ),
                                     child: Row(
                                       children: [
-                                        CircleAvatar(
+                                        UserAvatar(
+                                          name: user.name,
+                                          photoUrl: user.photoUrl,
                                           radius: 24,
-                                          backgroundColor: const Color(0xFF8B7FB8),
-                                          backgroundImage: user.photoUrl != null
-                                              ? NetworkImage(user.photoUrl!)
-                                              : null,
-                                          child: user.photoUrl == null
-                                              ? Text(
-                                                  user.name.isNotEmpty
-                                                      ? user.name[0].toUpperCase()
-                                                      : '?',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                )
-                                              : null,
+                                          textStyle: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(

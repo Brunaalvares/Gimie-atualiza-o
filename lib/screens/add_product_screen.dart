@@ -32,6 +32,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   bool _showScrapingPreview = false;
   bool _awaitingShareFolderSelection = false;
   bool _isAutoSavingFromShare = false;
+  bool _isShareUrlFlow = false;
   String? _selectedCategory;
   ScrapedProductData? _scrapedData;
 
@@ -110,7 +111,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ..clear()
         ..addAll(categories);
 
-      if (_selectedCategory == null || _selectedCategory!.trim().isEmpty) {
+      if (_awaitingShareFolderSelection) {
+        // In shared-link flow, user must explicitly choose/create a folder.
+        _selectedCategory = null;
+      } else if (_selectedCategory == null || _selectedCategory!.trim().isEmpty) {
         if (widget.initialCategory != null && widget.initialCategory!.trim().isNotEmpty) {
           _selectedCategory = widget.initialCategory!.trim();
         } else if (_categories.isNotEmpty) {
@@ -181,8 +185,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
         }
 
         if (sharedUrl != null && sharedUrl!.isNotEmpty && mounted) {
+          final normalizedSharedUrl = _normalizeProductUrl(sharedUrl!);
+          final fallbackTitle = _buildFallbackNameFromUrl(normalizedSharedUrl);
           setState(() {
+            _isShareUrlFlow = true;
             _awaitingShareFolderSelection = true;
+            _selectedCategory = null;
+            // Show an immediate card so shared-link flow never looks empty.
+            _scrapedData = ScrapedProductData(
+              title: fallbackTitle,
+              description: 'Produto adicionado via link.',
+              price: null,
+              priceDisplay: 'Preço indisponível',
+              imageUrl: _fallbackImageUrl,
+              sourceUrl: normalizedSharedUrl,
+              scrapedAt: DateTime.now(),
+            );
+            _showScrapingPreview = true;
           });
           await _scrapeUrlData();
         }
@@ -353,8 +372,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     setState(() {
       _isScrapingUrl = true;
-      _scrapedData = null;
-      _showScrapingPreview = false;
+      if (!_isShareUrlFlow) {
+        _scrapedData = null;
+        _showScrapingPreview = false;
+      }
     });
 
     try {
@@ -586,8 +607,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Adicionar Produto',
+        title: Text(
+          _isShareUrlFlow ? 'Salvar link compartilhado' : 'Adicionar Produto',
           style: TextStyle(color: Color(0xFF6B2C5C)),
         ),
         backgroundColor: Colors.white,
@@ -604,66 +625,84 @@ class _AddProductScreenState extends State<AddProductScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Cole o link da página do produto (o endereço completo na barra do '
-                'navegador, com o item já aberto). O app tenta preencher imagem, nome e preço.',
-                style: TextStyle(
-                  fontFamily: 'Roboto',
-                  fontSize: 14,
-                  color: Colors.grey,
+              if (!_isShareUrlFlow) ...[
+                const Text(
+                  'Cole o link da página do produto (o endereço completo na barra do '
+                  'navegador, com o item já aberto). O app tenta preencher imagem, nome e preço.',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _urlController,
-                      decoration: const InputDecoration(
-                        labelText: 'URL do Produto',
-                        prefixIcon: Icon(Icons.link),
-                        hintText: 'https://… (página do item na loja)',
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _urlController,
+                        decoration: const InputDecoration(
+                          labelText: 'URL do Produto',
+                          prefixIcon: Icon(Icons.link),
+                          hintText: 'https://… (página do item na loja)',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Por favor, insira a URL';
+                          }
+                          if (!value.startsWith('http')) {
+                            return 'Por favor, insira uma URL válida';
+                          }
+                          return null;
+                        },
+                        onChanged: (value) {
+                          // Limpa preview quando URL muda
+                          if (_showScrapingPreview) {
+                            setState(() {
+                              _showScrapingPreview = false;
+                              _scrapedData = null;
+                            });
+                          }
+                        },
+                        onFieldSubmitted: (_) => _scrapeUrlData(),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Por favor, insira a URL';
-                        }
-                        if (!value.startsWith('http')) {
-                          return 'Por favor, insira uma URL válida';
-                        }
-                        return null;
-                      },
-                      onChanged: (value) {
-                        // Limpa preview quando URL muda
-                        if (_showScrapingPreview) {
-                          setState(() {
-                            _showScrapingPreview = false;
-                            _scrapedData = null;
-                          });
-                        }
-                      },
-                      onFieldSubmitted: (_) => _scrapeUrlData(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: _isScrapingUrl ? null : _scrapeUrlData,
-                    icon: _isScrapingUrl
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.auto_awesome),
-                    tooltip: 'Extrair dados automaticamente',
-                    style: IconButton.styleFrom(
-                      backgroundColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                      foregroundColor: Theme.of(context).primaryColor,
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _isScrapingUrl ? null : _scrapeUrlData,
+                      icon: _isScrapingUrl
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      tooltip: 'Extrair dados automaticamente',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                        foregroundColor: Theme.of(context).primaryColor,
+                      ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ] else ...[
+                const Text(
+                  'Link detectado e card preenchido automaticamente. Escolha a pasta de destino '
+                  'ou crie uma nova para salvar.',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 14,
+                    color: Colors.grey,
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                ),
+                const SizedBox(height: 14),
+                if (_isScrapingUrl)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: LinearProgressIndicator(),
+                  ),
+              ],
               
               // Preview dos dados scraped
               if (_showScrapingPreview && _scrapedData != null) ...[
@@ -753,11 +792,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                IconButton(
-                                  onPressed: _discardScrapedData,
-                                  icon: const Icon(Icons.close),
-                                  tooltip: 'Descartar',
-                                ),
+                                if (!_isShareUrlFlow)
+                                  IconButton(
+                                    onPressed: _discardScrapedData,
+                                    icon: const Icon(Icons.close),
+                                    tooltip: 'Descartar',
+                                  ),
                               ],
                             ),
                             const SizedBox(height: 6),
@@ -809,28 +849,30 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 16),
 
-              const SizedBox(height: 32),
-              Consumer<ProductProvider>(
-                builder: (context, provider, _) {
-                  return ElevatedButton(
-                    onPressed: provider.isLoading ? null : _handleSubmit,
-                    child: provider.isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
+              if (!_isShareUrlFlow) ...[
+                const SizedBox(height: 32),
+                Consumer<ProductProvider>(
+                  builder: (context, provider, _) {
+                    return ElevatedButton(
+                      onPressed: provider.isLoading ? null : _handleSubmit,
+                      child: provider.isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              _newCategoryController.text.trim().isNotEmpty
+                                  ? 'Criar Pasta e Salvar Produto'
+                                  : 'Salvar Produto na Pasta',
                             ),
-                          )
-                        : Text(
-                            _newCategoryController.text.trim().isNotEmpty
-                                ? 'Criar Pasta e Salvar Produto'
-                                : 'Salvar Produto na Pasta',
-                          ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
+              ],
             ],
           ),
         ),

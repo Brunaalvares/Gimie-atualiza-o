@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../services/firebase_service.dart';
 import '../utils/profile_folder_layout.dart';
+import '../widgets/user_avatar.dart';
 import 'follow_list_screen.dart';
 import 'folder_products_screen.dart';
 
@@ -174,23 +175,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     padding: const EdgeInsets.only(bottom: 24),
                     children: [
                       const SizedBox(height: 18),
-                      CircleAvatar(
+                      UserAvatar(
+                        name: _viewedUser.name,
+                        photoUrl: _viewedUser.photoUrl,
                         radius: 52,
-                        backgroundColor: const Color(0xFF8B7FB8),
-                        backgroundImage:
-                            _viewedUser.photoUrl != null ? NetworkImage(_viewedUser.photoUrl!) : null,
-                        child: _viewedUser.photoUrl == null
-                            ? Text(
-                                _viewedUser.name.isNotEmpty
-                                    ? _viewedUser.name[0].toUpperCase()
-                                    : '?',
-                                style: const TextStyle(
-                                  fontSize: 30,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : null,
+                        textStyle: const TextStyle(
+                          fontSize: 30,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       Center(

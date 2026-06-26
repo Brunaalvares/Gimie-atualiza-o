@@ -14,6 +14,7 @@ class ProductProvider extends ChangeNotifier {
   List<Product> _followingFeed = [];
   List<Product> _userProducts = [];
   bool _isLoading = false;
+  bool _isFollowingFeedLoading = false;
   String? _errorMessage;
   String? _selectedCategory;
 
@@ -21,6 +22,7 @@ class ProductProvider extends ChangeNotifier {
   List<Product> get followingFeed => _followingFeed;
   List<Product> get userProducts => _userProducts;
   bool get isLoading => _isLoading;
+  bool get isFollowingFeedLoading => _isFollowingFeedLoading;
   String? get errorMessage => _errorMessage;
   String? get selectedCategory => _selectedCategory;
 
@@ -33,6 +35,17 @@ class ProductProvider extends ChangeNotifier {
       return 'Produto não encontrado para esta operação.';
     }
     return fallbackMessage;
+  }
+
+  String _trimToMax(String value, int max) {
+    final trimmed = value.trim();
+    if (trimmed.length <= max) return trimmed;
+    return trimmed.substring(0, max);
+  }
+
+  double _safeNonNegativePrice(double value) {
+    if (!value.isFinite || value < 0) return 0.0;
+    return value;
   }
 
   // Load products from both API and Firebase
@@ -113,7 +126,7 @@ class ProductProvider extends ChangeNotifier {
     required String currentUserId,
     required List<String> followingIds,
   }) async {
-    _isLoading = true;
+    _isFollowingFeedLoading = true;
     notifyListeners();
 
     try {
@@ -126,7 +139,7 @@ class ProductProvider extends ChangeNotifier {
       if (sanitizedIds.isEmpty) {
         _followingFeed = [];
         _errorMessage = null;
-        _isLoading = false;
+        _isFollowingFeedLoading = false;
         notifyListeners();
         return;
       }
@@ -134,11 +147,11 @@ class ProductProvider extends ChangeNotifier {
       _followingFeed =
           await _firebaseService.getProductsFromFollowedUsers(sanitizedIds);
       _errorMessage = null;
-      _isLoading = false;
+      _isFollowingFeedLoading = false;
       notifyListeners();
     } catch (e) {
       _errorMessage = 'Erro ao carregar feed de quem você segue';
-      _isLoading = false;
+      _isFollowingFeedLoading = false;
       notifyListeners();
     }
   }
@@ -244,17 +257,34 @@ class ProductProvider extends ChangeNotifier {
     }
 
     try {
+      final sanitizedName = _trimToMax(sourceProduct.name, 500);
+      final sanitizedDescription = _trimToMax(
+        sourceProduct.description.isNotEmpty
+            ? sourceProduct.description
+            : 'Produto salvo de outra pasta',
+        10000,
+      );
+      final sanitizedImageUrl = _trimToMax(sourceProduct.imageUrl, 2000);
+      final sanitizedUrl = _trimToMax(sourceProduct.url, 2000);
+      final sanitizedCategory = _trimToMax(normalizedCategory, 200);
+      final sanitizedPriceDisplay = sourceProduct.priceDisplay == null
+          ? null
+          : _trimToMax(sourceProduct.priceDisplay!, 200);
+
       final copiedProduct = Product(
         id: '',
-        name: sourceProduct.name,
-        description: sourceProduct.description,
-        price: sourceProduct.price,
-        priceDisplay: sourceProduct.priceDisplay,
-        imageUrl: sourceProduct.imageUrl,
-        url: sourceProduct.url,
+        name: sanitizedName.isNotEmpty ? sanitizedName : 'Produto sem nome',
+        description: sanitizedDescription,
+        price: _safeNonNegativePrice(sourceProduct.price),
+        priceDisplay: sanitizedPriceDisplay,
+        imageUrl: sanitizedImageUrl,
+        url: sanitizedUrl,
         userId: currentUserId,
-        category: normalizedCategory,
+        category: sanitizedCategory,
         createdAt: DateTime.now(),
+        // Preserve ownership copy behavior: new save starts sem likes.
+        likes: 0,
+        likedBy: const [],
       );
 
       final productId = await _firebaseService.createProduct(copiedProduct);

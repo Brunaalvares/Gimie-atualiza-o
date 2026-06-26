@@ -13,6 +13,7 @@ import 'follow_list_screen.dart';
 import 'folder_products_screen.dart';
 import 'login_screen.dart';
 import '../widgets/profile_notifications_panel.dart';
+import '../widgets/user_avatar.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -786,22 +787,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             onTap: _isUploadingPhoto
                                 ? null
                                 : _pickAndUploadProfilePhoto,
-                            child: CircleAvatar(
+                            child: UserAvatar(
+                              name: user.name,
+                              photoUrl: user.photoUrl,
                               radius: 54,
-                              backgroundColor: const Color(0xFF8B7FB8),
-                              backgroundImage: user.photoUrl != null
-                                  ? NetworkImage(user.photoUrl!)
-                                  : null,
-                              child: user.photoUrl == null
-                                  ? Text(
-                                      user.name[0].toUpperCase(),
-                                      style: const TextStyle(
-                                        fontSize: 32,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )
-                                  : null,
+                              textStyle: const TextStyle(
+                                fontSize: 32,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                           Positioned(

@@ -15,6 +15,10 @@ class ShareService {
   ShareService._();
 
   bool _isInitialized = false;
+  final StreamController<void> _sharedContentController =
+      StreamController<void>.broadcast();
+
+  Stream<void> get onSharedContentAvailable => _sharedContentController.stream;
 
   Future<void> initialize() async {
     if (_isInitialized) {
@@ -167,6 +171,7 @@ class ShareService {
 
       if (hasContent) {
         await prefs.setBool('has_shared_content', true);
+        _sharedContentController.add(null);
         DebugHelper.log('Shared content saved successfully', 'SHARE');
       }
     } catch (e) {

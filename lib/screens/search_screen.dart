@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../providers/product_provider.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/user_avatar.dart';
 import 'user_profile_screen.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -182,22 +183,14 @@ class _SearchScreenState extends State<SearchScreen> {
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   child: ListTile(
-                                    leading: CircleAvatar(
-                                      backgroundColor: const Color(0xFF8B7FB8),
-                                      backgroundImage: user.photoUrl != null
-                                          ? NetworkImage(user.photoUrl!)
-                                          : null,
-                                      child: user.photoUrl == null
-                                          ? Text(
-                                              user.name.isNotEmpty
-                                                  ? user.name[0].toUpperCase()
-                                                  : '?',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            )
-                                          : null,
+                                    leading: UserAvatar(
+                                      name: user.name,
+                                      photoUrl: user.photoUrl,
+                                      radius: 20,
+                                      textStyle: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                     title: Text(user.name),
                                     subtitle: Text('@${user.username}'),

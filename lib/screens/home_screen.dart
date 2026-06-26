@@ -46,6 +46,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _refreshFollowingFeed() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final productProvider = Provider.of<ProductProvider>(context, listen: false);
+    final user = authProvider.currentUser;
+    if (user == null) return;
+
+    _loadedFeedForUserId = user.id;
+    _loadedFollowingKey = (user.followingIds.toList()..sort()).join('|');
+    await productProvider.loadFollowingFeed(
+      currentUserId: user.id,
+      followingIds: user.followingIds,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           });
 
-          if (productProvider.isLoading) {
+          if (productProvider.isFollowingFeedLoading) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -80,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           final feedProducts = productProvider.followingFeed;
+          final feedError = productProvider.errorMessage;
 
           if (user.followingIds.isEmpty) {
             return const Center(
@@ -99,6 +114,35 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           if (feedProducts.isEmpty) {
+            if (feedError != null && feedError.isNotEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.wifi_off, size: 54, color: Colors.grey),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Não foi possível carregar os produtos de quem você segue.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 15,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      ElevatedButton(
+                        onPressed: _refreshFollowingFeed,
+                        child: const Text('Tentar novamente'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
             return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -119,19 +163,22 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
 
-          return GridView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-              childAspectRatio: 0.66,
+          return RefreshIndicator(
+            onRefresh: _refreshFollowingFeed,
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+                childAspectRatio: 0.66,
+              ),
+              itemCount: feedProducts.length,
+              itemBuilder: (context, index) {
+                final product = feedProducts[index];
+                return _ProductCard(product: product);
+              },
             ),
-            itemCount: feedProducts.length,
-            itemBuilder: (context, index) {
-              final product = feedProducts[index];
-              return _ProductCard(product: product);
-            },
           );
         },
       ),

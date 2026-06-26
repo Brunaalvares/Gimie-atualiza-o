@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'home_screen.dart';
@@ -19,6 +21,8 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   bool _checkedPendingShare = false;
+  bool _isOpeningShareFlow = false;
+  StreamSubscription<void>? _shareSubscription;
 
   final List<Widget> _screens = [
     const HomeScreen(),
@@ -29,23 +33,43 @@ class _MainShellState extends State<MainShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _shareSubscription = ShareService.instance.onSharedContentAvailable.listen((_) {
+      _openAddScreenIfSharedContentExists();
+    });
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_checkedPendingShare) return;
     _checkedPendingShare = true;
-    _openAddScreenIfSharedContentExists();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _openAddScreenIfSharedContentExists();
+    });
+  }
+
+  @override
+  void dispose() {
+    _shareSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _openAddScreenIfSharedContentExists() async {
+    if (_isOpeningShareFlow) return;
     final sharedContent = await ShareService.instance.getSharedContent();
     if (!mounted || sharedContent == null) return;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      Navigator.of(context).push(
+    _isOpeningShareFlow = true;
+    try {
+      await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const AddProductScreen()),
       );
-    });
+    } finally {
+      _isOpeningShareFlow = false;
+    }
   }
 
   void _onTabTapped(int index) {

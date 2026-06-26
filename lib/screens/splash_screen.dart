@@ -57,8 +57,24 @@ class _SplashScreenState extends State<SplashScreen> {
     }
     if (!mounted) return;
 
-    final shouldGoToHome =
-        authProvider.rememberMe && authProvider.isAuthenticated;
+    // On cold starts, Firebase can restore the auth session before user profile
+    // hydration finishes. Keep users connected when a valid Firebase session exists.
+    if (authProvider.rememberMe &&
+        authProvider.hasActiveFirebaseSession &&
+        !authProvider.isAuthenticated) {
+      var hydrateAttempts = 0;
+      while (!authProvider.isAuthenticated &&
+          authProvider.hasActiveFirebaseSession &&
+          hydrateAttempts < 25 &&
+          mounted) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        hydrateAttempts++;
+      }
+    }
+    if (!mounted) return;
+
+    final shouldGoToHome = authProvider.rememberMe &&
+        (authProvider.isAuthenticated || authProvider.hasActiveFirebaseSession);
 
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute(

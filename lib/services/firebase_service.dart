@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../models/user_model.dart';
 import '../models/product_model.dart';
 import '../models/user_notification_model.dart';
+import '../models/metrics_summary_model.dart';
 
 class FirebaseService {
   static final FirebaseService _instance = FirebaseService._internal();
@@ -115,10 +116,7 @@ class FirebaseService {
     if (!data.containsKey('followingIds') && data.containsKey('following')) {
       final legacy = data['following'];
       final migrated = legacy is List
-          ? legacy
-              .map((e) => e.toString())
-              .where((s) => s.isNotEmpty)
-              .toList()
+          ? legacy.map((e) => e.toString()).where((s) => s.isNotEmpty).toList()
           : <String>[];
       updates['followingIds'] = migrated;
       updates['following'] = FieldValue.delete();
@@ -510,6 +508,8 @@ class FirebaseService {
         'actorName': actor?.name ?? '',
         'actorUsername': actor?.username ?? '',
         'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'readAt': null,
       });
       await batch.commit();
     } catch (e) {
@@ -689,6 +689,8 @@ class FirebaseService {
             'actorName': liker?.name ?? '',
             'actorUsername': liker?.username ?? '',
             'createdAt': FieldValue.serverTimestamp(),
+            'isRead': false,
+            'readAt': null,
           });
         }
       }
@@ -709,6 +711,18 @@ class FirebaseService {
           (snap) => snap.docs
               .map((d) => UserNotification.fromFirestore(d.data(), d.id))
               .toList(),
+        );
+  }
+
+  /// Contagem de notificações não lidas (bolinha azul no perfil).
+  Stream<int> getUnreadNotificationsCountStream(String userId) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .snapshots()
+        .map(
+          (snap) => snap.docs.where((d) => d.data()['isRead'] != true).length,
         );
   }
 
@@ -925,6 +939,346 @@ class FirebaseService {
       await ref.delete();
     } catch (e) {
       throw Exception('Delete image error: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Métricas e gamificação
+  // ---------------------------------------------------------------------------
+
+  DocumentReference<Map<String, dynamic>> _metricsSummaryRef(String userId) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('metrics')
+        .doc('summary');
+  }
+
+  /// Chave estável de pasta (doc id) a partir do nome da pasta.
+  String _folderKey(String folderName) {
+    final normalized = folderName
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    return normalized.isEmpty ? 'pasta' : normalized;
+  }
+
+  /// Incrementa um campo inteiro em `users/{userId}/metrics/summary`.
+  /// Regras Firestore só permitem escrita pelo próprio utilizador.
+  Future<void> incrementUserMetric({
+    required String userId,
+    required String field,
+    int amount = 1,
+  }) async {
+    if (_auth.currentUser?.uid != userId) return;
+    try {
+      await _metricsSummaryRef(userId).set({
+        field: FieldValue.increment(amount),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Increment user metric error ($field): $e');
+    }
+  }
+
+  Future<MetricsSummary> getMetricsSummary(String userId) async {
+    try {
+      final doc = await _metricsSummaryRef(userId).get();
+      return MetricsSummary.fromFirestore(doc.data());
+    } catch (e) {
+      debugPrint('Get metrics summary error: $e');
+      return const MetricsSummary();
+    }
+  }
+
+  /// Cria notificação interna em `users/{recipientId}/notifications`.
+  /// Payload segue `notifPayloadValid` das regras Firestore.
+  Future<void> createInternalNotification({
+    required String recipientId,
+    required String actorId,
+    required String type,
+    String? metricName,
+    String? badgeId,
+    String? badgeName,
+    String? folderName,
+    String? productId,
+    String? productName,
+    String? actorName,
+    String? actorUsername,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'recipientId': recipientId,
+        'actorId': actorId,
+        'type': type,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'readAt': null,
+      };
+      if (type == 'badge_earned') {
+        payload['badgeId'] = badgeId ?? '';
+        if (badgeName != null) payload['badgeName'] = badgeName;
+      } else if (type == 'metric_event') {
+        payload['metricName'] = metricName ?? '';
+        if (folderName != null) payload['folderName'] = folderName;
+        if (productId != null) payload['productId'] = productId;
+        if (productName != null) payload['productName'] = productName;
+      } else {
+        if (actorName != null) payload['actorName'] = actorName;
+        if (actorUsername != null) payload['actorUsername'] = actorUsername;
+        if (type == 'like' && productId != null) {
+          payload['productId'] = productId;
+          if (productName != null) payload['productName'] = productName;
+        }
+      }
+      await _firestore
+          .collection('users')
+          .doc(recipientId)
+          .collection('notifications')
+          .add(payload);
+    } catch (e) {
+      debugPrint('Create internal notification error: $e');
+    }
+  }
+
+  /// Visita de perfil: conta no summary do visitante (badge Explorador)
+  /// e notifica o dono. Ignora visitas ao próprio perfil.
+  Future<void> recordProfileVisit({
+    required String ownerId,
+    required String viewerId,
+  }) async {
+    if (ownerId.isEmpty || viewerId.isEmpty || ownerId == viewerId) return;
+    await incrementUserMetric(userId: viewerId, field: 'profileVisits');
+    await createInternalNotification(
+      recipientId: ownerId,
+      actorId: viewerId,
+      type: 'metric_event',
+      metricName: 'visita ao perfil',
+    );
+  }
+
+  /// Visualização de pasta: agrega em `folder_stats` do dono (fonte do badge
+  /// Criador de Tendências) e conta no summary do visitante.
+  Future<void> recordFolderView({
+    required String ownerId,
+    required String viewerId,
+    required String folderName,
+    String source = 'app',
+  }) async {
+    final trimmedName = folderName.trim();
+    if (ownerId.isEmpty ||
+        viewerId.isEmpty ||
+        trimmedName.isEmpty ||
+        ownerId == viewerId) {
+      return;
+    }
+    try {
+      await _firestore
+          .collection('users')
+          .doc(ownerId)
+          .collection('folder_stats')
+          .doc(_folderKey(trimmedName))
+          .set({
+        'ownerId': ownerId,
+        'folderName': trimmedName,
+        'viewCount': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Record folder view error: $e');
+    }
+    await incrementUserMetric(userId: viewerId, field: 'folderViews');
+    await createInternalNotification(
+      recipientId: ownerId,
+      actorId: viewerId,
+      type: 'metric_event',
+      metricName: 'visualização de pasta',
+      folderName: trimmedName,
+    );
+  }
+
+  Future<void> _incrementProductStat({
+    required String ownerId,
+    required String productId,
+    required String field,
+    String? productName,
+  }) async {
+    try {
+      final data = <String, dynamic>{
+        'ownerId': ownerId,
+        'productId': productId,
+        field: FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      final name = productName?.trim();
+      if (name != null && name.isNotEmpty) {
+        data['productName'] = name;
+      }
+      await _firestore
+          .collection('users')
+          .doc(ownerId)
+          .collection('product_stats')
+          .doc(productId)
+          .set(data, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Record product stat error ($field): $e');
+    }
+  }
+
+  /// Visita de produto: agrega em `product_stats` do dono e conta no summary
+  /// do visitante (badge Explorador). Ignora produtos do próprio utilizador.
+  Future<void> recordProductVisit({
+    required String ownerId,
+    required String viewerId,
+    required String productId,
+    String? productName,
+  }) async {
+    if (ownerId.isEmpty ||
+        viewerId.isEmpty ||
+        productId.isEmpty ||
+        ownerId == viewerId) {
+      return;
+    }
+    await _incrementProductStat(
+      ownerId: ownerId,
+      productId: productId,
+      field: 'productViews',
+      productName: productName,
+    );
+    await incrementUserMetric(userId: viewerId, field: 'productVisits');
+  }
+
+  /// Clique em Shop Now: agrega em `product_stats` do dono (aba Métricas)
+  /// e notifica o dono quando o clique vem de outro utilizador.
+  Future<void> recordShopNowClick({
+    required String ownerId,
+    required String viewerId,
+    required String productId,
+    String? productName,
+  }) async {
+    if (ownerId.isEmpty || viewerId.isEmpty || productId.isEmpty) return;
+    await _incrementProductStat(
+      ownerId: ownerId,
+      productId: productId,
+      field: 'shopNowClicks',
+      productName: productName,
+    );
+    if (ownerId == viewerId) return;
+    await incrementUserMetric(userId: viewerId, field: 'shopNowClicks');
+    await createInternalNotification(
+      recipientId: ownerId,
+      actorId: viewerId,
+      type: 'metric_event',
+      metricName: 'clique em Shop Now',
+      productId: productId,
+      productName: productName,
+    );
+  }
+
+  /// Visita à aba Trends (conta no summary do próprio utilizador).
+  Future<void> recordTrendVisit(String userId) async {
+    if (userId.isEmpty) return;
+    await incrementUserMetric(userId: userId, field: 'trendViews');
+  }
+
+  static String _dateKey(DateTime dt) {
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    return '${dt.year}-$m-$d';
+  }
+
+  /// Streak diário: incrementa se o último acesso foi ontem, reinicia caso
+  /// contrário. No-op se já registado hoje.
+  Future<void> touchDailyStreak(String userId) async {
+    if (_auth.currentUser?.uid != userId) return;
+    try {
+      final summary = await getMetricsSummary(userId);
+      final now = DateTime.now();
+      final today = _dateKey(now);
+      if (summary.lastActiveDate == today) return;
+
+      final yesterday = _dateKey(now.subtract(const Duration(days: 1)));
+      final newStreak =
+          summary.lastActiveDate == yesterday ? summary.streakDays + 1 : 1;
+      final maxStreak =
+          newStreak > summary.maxStreakDays ? newStreak : summary.maxStreakDays;
+
+      await _metricsSummaryRef(userId).set({
+        'streakDays': newStreak,
+        'maxStreakDays': maxStreak,
+        'lastActiveDate': today,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Touch daily streak error: $e');
+    }
+  }
+
+  /// Pastas mais visualizadas do utilizador (`folder_stats`), ordenadas por views.
+  Future<List<Map<String, dynamic>>> getTopViewedFolders(
+    String userId, {
+    int limit = 3,
+  }) async {
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('folder_stats')
+          .orderBy('viewCount', descending: true)
+          .limit(limit)
+          .get();
+      return snap.docs.map((d) => d.data()).toList();
+    } catch (e) {
+      debugPrint('Get top viewed folders error: $e');
+      return const [];
+    }
+  }
+
+  /// Estatísticas por produto (`product_stats`), ordenadas por cliques Shop Now.
+  Future<List<Map<String, dynamic>>> getTopProductStats(
+    String userId, {
+    int limit = 20,
+  }) async {
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('product_stats')
+          .orderBy('shopNowClicks', descending: true)
+          .limit(limit)
+          .get();
+      return snap.docs.map((d) => d.data()).toList();
+    } catch (e) {
+      debugPrint('Get top product stats error: $e');
+      return const [];
+    }
+  }
+
+  /// Marca todas as notificações não lidas como lidas.
+  Future<void> markAllNotificationsAsRead(String userId) async {
+    if (_auth.currentUser?.uid != userId) return;
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .orderBy('createdAt', descending: true)
+          .limit(200)
+          .get();
+      final unread =
+          snap.docs.where((d) => d.data()['isRead'] != true).toList();
+      if (unread.isEmpty) return;
+      final batch = _firestore.batch();
+      for (final doc in unread) {
+        batch.update(doc.reference, {
+          'isRead': true,
+          'readAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Mark notifications as read error: $e');
     }
   }
 

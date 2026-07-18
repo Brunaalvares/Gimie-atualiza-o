@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/product_provider.dart';
 import '../models/product_model.dart';
+import '../services/metrics_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -205,6 +208,26 @@ class _ProductCard extends StatelessWidget {
   }
 
   Future<void> _openProductLink(BuildContext context) async {
+    final viewerId = Provider.of<AuthProvider>(context, listen: false).resolvedUserId;
+    if (viewerId != null && viewerId.isNotEmpty) {
+      unawaited(
+        MetricsService.instance.trackProductVisit(
+          ownerId: product.userId,
+          viewerId: viewerId,
+          productId: product.id,
+          productName: product.name,
+        ),
+      );
+      unawaited(
+        MetricsService.instance.trackShopNowClick(
+          ownerId: product.userId,
+          viewerId: viewerId,
+          productId: product.id,
+          productName: product.name,
+        ),
+      );
+    }
+
     final uri = _buildProductUri();
     if (uri == null) {
       ScaffoldMessenger.of(context).showSnackBar(

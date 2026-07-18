@@ -92,6 +92,12 @@ service cloud.firestore {
       return t is string
         && d.actorId is string
         && d.recipientId is string
+        && (!('isRead' in d) || d.isRead is bool)
+        && (!('readAt' in d) || d.readAt == null || d.readAt is timestamp)
+        && optionalStringMax(d, 'badgeId', 120)
+        && optionalStringMax(d, 'badgeName', 300)
+        && optionalStringMax(d, 'metricName', 120)
+        && optionalStringMax(d, 'folderName', 200)
         && optionalStringMax(d, 'actorName', 200)
         && optionalStringMax(d, 'actorUsername', 100)
         && optionalStringMax(d, 'productName', 500)
@@ -101,16 +107,109 @@ service cloud.firestore {
           (t == 'follow'
             && d.keys().hasOnly([
               'recipientId', 'actorId', 'type',
-              'actorName', 'actorUsername', 'createdAt'
+              'actorName', 'actorUsername', 'createdAt', 'isRead', 'readAt'
             ]))
           || (t == 'like'
             && d.keys().hasOnly([
               'recipientId', 'actorId', 'type',
               'productId', 'productName',
-              'actorName', 'actorUsername', 'createdAt'
+              'actorName', 'actorUsername', 'createdAt', 'isRead', 'readAt'
             ])
             && nonEmptyString(d.productId))
+          || (t == 'badge_earned'
+            && d.keys().hasOnly([
+              'recipientId', 'actorId', 'type',
+              'badgeId', 'badgeName',
+              'createdAt', 'isRead', 'readAt'
+            ])
+            && nonEmptyString(d.badgeId))
+          || (t == 'metric_event'
+            && d.keys().hasOnly([
+              'recipientId', 'actorId', 'type',
+              'metricName', 'folderName', 'productId', 'productName',
+              'createdAt', 'isRead', 'readAt'
+            ])
+            && nonEmptyString(d.metricName))
         );
+    }
+
+    function notifReadUpdateValid(userId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      return request.auth.uid == userId
+        && before.diff(after).affectedKeys().hasOnly(['isRead', 'readAt'])
+        && (!('isRead' in after) || after.isRead is bool)
+        && (!('readAt' in after) || after.readAt == null || after.readAt is timestamp);
+    }
+
+    function validBadgeProgressDoc(d) {
+      return d.keys().hasOnly([
+            'badgeId', 'title', 'description', 'category', 'tier',
+            'target', 'current', 'earned', 'earnedAt', 'updatedAt',
+            'progressLabel', 'isComingSoon'
+          ])
+        && d.badgeId is string
+        && d.title is string
+        && d.description is string
+        && d.category is string
+        && d.tier is string
+        && d.target is int
+        && d.current is int
+        && d.earned is bool
+        && (!('earnedAt' in d) || d.earnedAt == null || d.earnedAt is timestamp)
+        && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp)
+        && optionalStringMax(d, 'progressLabel', 200)
+        && (!('isComingSoon' in d) || d.isComingSoon is bool);
+    }
+
+    function validMetricsSummaryDoc(d) {
+      return d.keys().hasOnly([
+            'searchCount', 'profileVisits', 'productVisits', 'folderViews',
+            'trendViews', 'shopNowClicks', 'likesGiven', 'followsCount',
+            'savedProductsCount', 'foldersCreatedCount',
+            'streakDays', 'maxStreakDays', 'lastActiveDate', 'updatedAt'
+          ])
+        && (!('searchCount' in d) || (d.searchCount is int && d.searchCount >= 0))
+        && (!('profileVisits' in d) || (d.profileVisits is int && d.profileVisits >= 0))
+        && (!('productVisits' in d) || (d.productVisits is int && d.productVisits >= 0))
+        && (!('folderViews' in d) || (d.folderViews is int && d.folderViews >= 0))
+        && (!('trendViews' in d) || (d.trendViews is int && d.trendViews >= 0))
+        && (!('shopNowClicks' in d) || (d.shopNowClicks is int && d.shopNowClicks >= 0))
+        && (!('likesGiven' in d) || (d.likesGiven is int && d.likesGiven >= 0))
+        && (!('followsCount' in d) || (d.followsCount is int && d.followsCount >= 0))
+        && (!('savedProductsCount' in d) || (d.savedProductsCount is int && d.savedProductsCount >= 0))
+        && (!('foldersCreatedCount' in d) || (d.foldersCreatedCount is int && d.foldersCreatedCount >= 0))
+        && (!('streakDays' in d) || (d.streakDays is int && d.streakDays >= 0))
+        && (!('maxStreakDays' in d) || (d.maxStreakDays is int && d.maxStreakDays >= 0))
+        && (!('lastActiveDate' in d) || d.lastActiveDate == null || d.lastActiveDate is string)
+        && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp);
+    }
+
+    function validFolderStatsDoc(d, ownerId) {
+      return d.keys().hasOnly(['ownerId', 'folderName', 'viewCount', 'updatedAt'])
+        && d.ownerId is string
+        && d.ownerId == ownerId
+        && d.folderName is string
+        && d.folderName.size() > 0
+        && d.folderName.size() <= 200
+        && d.viewCount is int
+        && d.viewCount >= 0
+        && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp);
+    }
+
+    function validProductStatsDoc(d, ownerId, productId) {
+      return d.keys().hasOnly([
+            'ownerId', 'productId', 'productName', 'shopNowClicks',
+            'productViews', 'updatedAt'
+          ])
+        && d.ownerId is string
+        && d.ownerId == ownerId
+        && d.productId is string
+        && d.productId == productId
+        && optionalStringMax(d, 'productName', 500)
+        && (!('shopNowClicks' in d) || (d.shopNowClicks is int && d.shopNowClicks >= 0))
+        && (!('productViews' in d) || (d.productViews is int && d.productViews >= 0))
+        && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp);
     }
 
     function validProductCreate(d) {
@@ -241,13 +340,53 @@ service cloud.firestore {
 
         allow delete: if isSelf(userId);
 
-        allow update: if false;
+        allow update: if notifReadUpdateValid(userId);
 
         allow create: if signedIn()
           && request.resource.data.actorId == request.auth.uid
           && request.resource.data.recipientId == userId
-          && request.resource.data.recipientId != request.auth.uid
           && notifPayloadValid();
+      }
+
+      match /badge_progress/{badgeId} {
+        allow get, list: if isSelf(userId);
+        allow create, update: if isSelf(userId)
+          && validBadgeProgressDoc(request.resource.data);
+        allow delete: if isSelf(userId);
+      }
+
+      match /metrics/{metricDoc} {
+        allow get, list: if isSelf(userId);
+        allow create, update: if isSelf(userId)
+          && validMetricsSummaryDoc(request.resource.data);
+        allow delete: if false;
+      }
+
+      match /folder_stats/{folderKey} {
+        allow get, list: if signedIn();
+        allow create, update: if signedIn()
+          && validFolderStatsDoc(request.resource.data, userId);
+        allow delete: if isSelf(userId);
+      }
+
+      match /product_stats/{productId} {
+        allow get, list: if signedIn();
+        allow create, update: if signedIn()
+          && validProductStatsDoc(request.resource.data, userId, productId);
+        allow delete: if isSelf(userId);
+      }
+
+      match /fcm_tokens/{tokenId} {
+        allow get, list: if isSelf(userId);
+        allow create, update: if isSelf(userId)
+          && request.resource.data.keys().hasOnly(['token', 'updatedAt', 'platform'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0
+          && optionalStringMax(request.resource.data, 'platform', 50)
+          && (!('updatedAt' in request.resource.data)
+            || request.resource.data.updatedAt == null
+            || request.resource.data.updatedAt is timestamp);
+        allow delete: if isSelf(userId);
       }
     }
 

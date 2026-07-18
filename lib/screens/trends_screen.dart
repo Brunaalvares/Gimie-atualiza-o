@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -209,7 +211,8 @@ class _TrendBoardBlock extends StatelessWidget {
                         child: CachedNetworkImage(
                           imageUrl: m.imageUrl,
                           fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(color: Colors.grey.shade200),
+                          placeholder: (_, __) =>
+                              Container(color: Colors.grey.shade200),
                           errorWidget: (_, __, ___) =>
                               const Icon(Icons.broken_image_outlined),
                         ),

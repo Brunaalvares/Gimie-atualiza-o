@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/product_model.dart';
 import '../services/firebase_service.dart';
 import '../services/api_service.dart';
+import '../services/metrics_service.dart';
+import '../services/badges_service.dart';
 
 class ProductProvider extends ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
@@ -10,6 +14,7 @@ class ProductProvider extends ChangeNotifier {
 
   /// Catálogo global / resultados da aba Buscar.
   List<Product> _products = [];
+
   /// Feed da Home: produtos de quem o utilizador segue.
   List<Product> _followingFeed = [];
   List<Product> _userProducts = [];
@@ -28,7 +33,8 @@ class ProductProvider extends ChangeNotifier {
 
   String _mapDataWriteError(Object error, String fallbackMessage) {
     final text = error.toString();
-    if (text.contains('permission-denied') || text.contains('PERMISSION_DENIED')) {
+    if (text.contains('permission-denied') ||
+        text.contains('PERMISSION_DENIED')) {
       return 'Sem permissão no Firestore para criar/excluir produto. Verifique as regras da coleção products.';
     }
     if (text.contains('not-found')) {
@@ -67,8 +73,9 @@ class ProductProvider extends ChangeNotifier {
 
       // Load from Firebase
       try {
-        final firebaseProducts = await _firebaseService.getProducts(category: category);
-        
+        final firebaseProducts =
+            await _firebaseService.getProducts(category: category);
+
         // Merge products, avoiding duplicates
         for (var fbProduct in firebaseProducts) {
           if (!allProducts.any((p) => p.id == fbProduct.id)) {
@@ -109,7 +116,9 @@ class ProductProvider extends ChangeNotifier {
       // Fallback: tenta carregar produtos gerais e filtrar localmente.
       try {
         final allProducts = await _firebaseService.getProducts();
-        _userProducts = allProducts.where((product) => product.userId == userId).toList()
+        _userProducts = allProducts
+            .where((product) => product.userId == userId)
+            .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         _errorMessage = null;
       } catch (fallbackError) {
@@ -190,6 +199,13 @@ class ProductProvider extends ChangeNotifier {
 
       _errorMessage = null;
       _isLoading = false;
+      final ownerId = productsInFolder.first.userId;
+      if (ownerId.isNotEmpty) {
+        unawaited(
+          MetricsService.instance.syncSavedProductsCount(userId: ownerId),
+        );
+        unawaited(BadgesService.instance.evaluateAndSync(ownerId));
+      }
       notifyListeners();
       return true;
     } catch (e) {
@@ -290,11 +306,16 @@ class ProductProvider extends ChangeNotifier {
       final productId = await _firebaseService.createProduct(copiedProduct);
       final created = copiedProduct.copyWith(id: productId);
       _userProducts.insert(0, created);
+      unawaited(
+        MetricsService.instance.syncSavedProductsCount(userId: currentUserId),
+      );
+      unawaited(BadgesService.instance.evaluateAndSync(currentUserId));
       _errorMessage = null;
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = _mapDataWriteError(e, 'Erro ao salvar produto na sua pasta');
+      _errorMessage =
+          _mapDataWriteError(e, 'Erro ao salvar produto na sua pasta');
       notifyListeners();
       return false;
     }
@@ -359,9 +380,11 @@ class ProductProvider extends ChangeNotifier {
       } catch (e) {
         debugPrint('Firebase refresh user products error: $e');
       }
-      
+
       _errorMessage = null;
       _isLoading = false;
+      unawaited(MetricsService.instance.syncSavedProductsCount(userId: userId));
+      unawaited(BadgesService.instance.evaluateAndSync(userId));
       notifyListeners();
       return true;
     } catch (e) {
@@ -378,6 +401,17 @@ class ProductProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      String removedOwnerId = '';
+      final inUserProducts = _userProducts.where((p) => p.id == productId);
+      if (inUserProducts.isNotEmpty) {
+        removedOwnerId = inUserProducts.first.userId;
+      } else {
+        final inProducts = _products.where((p) => p.id == productId);
+        if (inProducts.isNotEmpty) {
+          removedOwnerId = inProducts.first.userId;
+        }
+      }
+
       // Delete from Firebase
       await _firebaseService.deleteProduct(productId);
 
@@ -394,9 +428,16 @@ class ProductProvider extends ChangeNotifier {
       _products.removeWhere((p) => p.id == productId);
       _followingFeed.removeWhere((p) => p.id == productId);
       _userProducts.removeWhere((p) => p.id == productId);
-      
+
       _errorMessage = null;
       _isLoading = false;
+      if (removedOwnerId.isNotEmpty) {
+        unawaited(
+          MetricsService.instance
+              .syncSavedProductsCount(userId: removedOwnerId),
+        );
+        unawaited(BadgesService.instance.evaluateAndSync(removedOwnerId));
+      }
       notifyListeners();
       return true;
     } catch (e) {
@@ -426,8 +467,15 @@ class ProductProvider extends ChangeNotifier {
   // Like/Unlike product
   Future<void> toggleLike(String productId, String userId) async {
     try {
+      final before = getProductById(productId);
+      final wasLiked = before?.likedBy.contains(userId) ?? false;
       // Update Firebase
       await _firebaseService.likeProduct(productId, userId);
+      if (!wasLiked) {
+        unawaited(MetricsService.instance.trackLikeGiven(userId: userId));
+      } else {
+        unawaited(BadgesService.instance.evaluateAndSync(userId));
+      }
 
       // Try to update API as well
       try {
@@ -470,7 +518,7 @@ class ProductProvider extends ChangeNotifier {
       // Search in Firebase
       try {
         final firebaseResults = await _firebaseService.searchProducts(query);
-        
+
         // Merge results, avoiding duplicates
         for (var fbProduct in firebaseResults) {
           if (!results.any((p) => p.id == fbProduct.id)) {

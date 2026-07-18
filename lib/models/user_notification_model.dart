@@ -7,6 +7,12 @@ class UserNotification {
   final String? productName;
   final String? actorName;
   final String? actorUsername;
+  final String? badgeId;
+  final String? badgeName;
+  final String? metricName;
+  final String? folderName;
+  final bool isRead;
+  final DateTime? readAt;
   final DateTime createdAt;
 
   UserNotification({
@@ -18,6 +24,12 @@ class UserNotification {
     this.productName,
     this.actorName,
     this.actorUsername,
+    this.badgeId,
+    this.badgeName,
+    this.metricName,
+    this.folderName,
+    this.isRead = false,
+    this.readAt,
     required this.createdAt,
   });
 
@@ -44,8 +56,23 @@ class UserNotification {
       productName: data['productName']?.toString(),
       actorName: data['actorName']?.toString(),
       actorUsername: data['actorUsername']?.toString(),
+      badgeId: data['badgeId']?.toString(),
+      badgeName: data['badgeName']?.toString(),
+      metricName: data['metricName']?.toString(),
+      folderName: data['folderName']?.toString(),
+      isRead: data['isRead'] == true,
+      readAt: _parseDate(data['readAt']),
       createdAt: created,
     );
+  }
+
+  static DateTime? _parseDate(dynamic raw) {
+    if (raw == null) return null;
+    try {
+      return (raw as dynamic).toDate() as DateTime;
+    } catch (_) {
+      return DateTime.tryParse(raw.toString());
+    }
   }
 
   String get displayTitle {
@@ -54,6 +81,10 @@ class UserNotification {
         return 'Novo seguidor';
       case 'like':
         return 'Curtida no seu produto';
+      case 'badge_earned':
+        return 'Novo badge conquistado';
+      case 'metric_event':
+        return 'Nova atividade';
       default:
         return 'Atividade';
     }
@@ -73,6 +104,18 @@ class UserNotification {
           ? '“${productName!.trim()}”'
           : 'um dos seus produtos';
       return '$handle curtiu $product';
+    }
+    if (type == 'badge_earned') {
+      final value = (badgeName != null && badgeName!.trim().isNotEmpty)
+          ? badgeName!.trim()
+          : 'um novo badge';
+      return 'Você conquistou: $value';
+    }
+    if (type == 'metric_event') {
+      final metric = metricName?.trim();
+      if (metric != null && metric.isNotEmpty) {
+        return '$handle registrou atividade de $metric';
+      }
     }
     return handle;
   }

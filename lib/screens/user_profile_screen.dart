@@ -5,6 +5,7 @@ import '../models/product_model.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../services/firebase_service.dart';
+import '../services/metrics_service.dart';
 import '../utils/profile_folder_layout.dart';
 import '../widgets/user_avatar.dart';
 import 'follow_list_screen.dart';
@@ -67,6 +68,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         _isLoading = false;
       });
       _listenFollowStats(_viewedUser.id);
+      final viewerId =
+          Provider.of<AuthProvider>(context, listen: false).resolvedUserId;
+      if (viewerId != null && viewerId.isNotEmpty && viewerId != _viewedUser.id) {
+        unawaited(
+          MetricsService.instance.trackProfileVisit(
+            ownerId: _viewedUser.id,
+            viewerId: viewerId,
+          ),
+        );
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {

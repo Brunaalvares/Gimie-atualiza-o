@@ -7,8 +7,15 @@ import '../services/firebase_service.dart';
 
 class ProfileNotificationsPanel extends StatefulWidget {
   final String userId;
+  final VoidCallback? onNotificationsOpened;
+  final bool markAsReadOnInit;
 
-  const ProfileNotificationsPanel({super.key, required this.userId});
+  const ProfileNotificationsPanel({
+    super.key,
+    required this.userId,
+    this.onNotificationsOpened,
+    this.markAsReadOnInit = true,
+  });
 
   @override
   State<ProfileNotificationsPanel> createState() =>
@@ -18,6 +25,30 @@ class ProfileNotificationsPanel extends StatefulWidget {
 class _ProfileNotificationsPanelState extends State<ProfileNotificationsPanel> {
   final FirebaseService _firebase = FirebaseService();
   bool _isClearing = false;
+  bool _markingAsRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.markAsReadOnInit) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _markAsReadOnOpen();
+      });
+    }
+  }
+
+  Future<void> _markAsReadOnOpen() async {
+    if (_markingAsRead) return;
+    _markingAsRead = true;
+    try {
+      await _firebase.markAllNotificationsAsRead(widget.userId);
+      widget.onNotificationsOpened?.call();
+    } catch (_) {
+      // No-op: unread indicator refresh is best-effort.
+    } finally {
+      _markingAsRead = false;
+    }
+  }
 
   static String _formatAge(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -143,7 +174,7 @@ class _ProfileNotificationsPanelState extends State<ProfileNotificationsPanel> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Quando alguém seguir você ou curtir um dos seus produtos, aparecerá aqui.',
+                    'Eventos do app, conquistas de badges e interações aparecem aqui.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: 'Roboto',
@@ -191,10 +222,14 @@ class _ProfileNotificationsPanelState extends State<ProfileNotificationsPanel> {
                   final n = items[index];
                   final icon = n.type == 'like'
                       ? Icons.favorite_outline
-                      : Icons.person_add_alt_1_outlined;
+                      : (n.type == 'badge_earned'
+                          ? Icons.workspace_premium_outlined
+                          : Icons.person_add_alt_1_outlined);
                   return Card(
                     elevation: 0,
-                    color: const Color(0xFFF8F6FB),
+                    color: n.isRead
+                        ? const Color(0xFFF8F6FB)
+                        : const Color(0xFFEFF6FF),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -230,7 +265,9 @@ class _ProfileNotificationsPanelState extends State<ProfileNotificationsPanel> {
                         style: TextStyle(
                           fontFamily: 'Roboto',
                           fontSize: 12,
-                          color: Colors.grey.shade600,
+                          color: n.isRead
+                              ? Colors.grey.shade600
+                              : const Color(0xFF0E7490),
                         ),
                       ),
                       onTap: n.actorId.isEmpty

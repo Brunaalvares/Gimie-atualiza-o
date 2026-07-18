@@ -6,6 +6,9 @@ import '../models/user_model.dart';
 import '../services/firebase_service.dart';
 import '../services/api_service.dart';
 import '../services/trends_service.dart';
+import '../services/metrics_service.dart';
+import '../services/badges_service.dart';
+import '../services/push_notification_service.dart';
 import '../config/social_config.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -69,6 +72,15 @@ class AuthProvider extends ChangeNotifier {
     try {
       final user = await _firebaseService.getUserDocument(userId);
       _currentUser = user ?? _buildFallbackUser(firebaseUser);
+      if (_currentUser != null) {
+        unawaited(
+          MetricsService.instance.touchDailyStreak(userId: _currentUser!.id),
+        );
+        unawaited(
+          PushNotificationService.instance.initialize(_currentUser!.id),
+        );
+        unawaited(BadgesService.instance.evaluateAndSync(_currentUser!.id));
+      }
     } catch (e) {
       _currentUser = _buildFallbackUser(firebaseUser);
       _errorMessage = 'Erro ao carregar dados do usuário';
@@ -420,6 +432,7 @@ class AuthProvider extends ChangeNotifier {
         photoUrl: photoUrl,
         bio: bio,
       );
+      unawaited(BadgesService.instance.evaluateAndSync(currentUser.id));
 
       _isLoading = false;
       notifyListeners();
@@ -489,6 +502,7 @@ class AuthProvider extends ChangeNotifier {
       }
 
       _currentUser = _currentUser!.copyWith(emptyFolders: normalized);
+      unawaited(BadgesService.instance.evaluateAndSync(userId));
       _isLoading = false;
       notifyListeners();
       return true;
@@ -573,6 +587,10 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = currentUser.copyWith(
         followingIds: followingSet.toList(),
       );
+      if (!isFollowing) {
+        unawaited(MetricsService.instance.trackFollow(userId: currentUser.id));
+      }
+      unawaited(BadgesService.instance.evaluateAndSync(currentUser.id));
       notifyListeners();
       return true;
     } catch (e) {

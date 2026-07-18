@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/product_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/product_provider.dart';
+import '../services/metrics_service.dart';
 import 'add_product_screen.dart';
 
 class FolderProductsScreen extends StatefulWidget {
@@ -31,6 +34,21 @@ class _FolderProductsScreenState extends State<FolderProductsScreen> {
   void initState() {
     super.initState();
     _visibleProducts = List<Product>.from(widget.products);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _trackFolderView();
+    });
+  }
+
+  Future<void> _trackFolderView() async {
+    if (!mounted || _visibleProducts.isEmpty) return;
+    final viewerId = Provider.of<AuthProvider>(context, listen: false).resolvedUserId;
+    final ownerId = _visibleProducts.first.userId;
+    if (viewerId == null || ownerId.isEmpty) return;
+    await MetricsService.instance.trackFolderView(
+      ownerId: ownerId,
+      viewerId: viewerId,
+      folderName: widget.categoryName,
+    );
   }
 
   Uri? _buildProductUri(String rawUrl) {
@@ -47,6 +65,33 @@ class _FolderProductsScreenState extends State<FolderProductsScreen> {
   }
 
   Future<void> _openProductLink(BuildContext context, String url) async {
+    Product? product;
+    for (final item in _visibleProducts) {
+      if (item.url == url) {
+        product = item;
+        break;
+      }
+    }
+    final viewerId = Provider.of<AuthProvider>(context, listen: false).resolvedUserId;
+    if (product != null && viewerId != null) {
+      unawaited(
+        MetricsService.instance.trackProductVisit(
+          ownerId: product.userId,
+          viewerId: viewerId,
+          productId: product.id,
+          productName: product.name,
+        ),
+      );
+      unawaited(
+        MetricsService.instance.trackShopNowClick(
+          ownerId: product.userId,
+          viewerId: viewerId,
+          productId: product.id,
+          productName: product.name,
+        ),
+      );
+    }
+
     final uri = _buildProductUri(url);
     if (uri == null) {
       ScaffoldMessenger.of(context).showSnackBar(

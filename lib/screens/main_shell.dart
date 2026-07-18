@@ -8,6 +8,8 @@ import 'profile_screen.dart';
 import 'search_screen.dart';
 import 'trends_screen.dart';
 import '../services/share_service.dart';
+import '../services/metrics_service.dart';
+import '../services/badges_service.dart';
 import '../providers/auth_provider.dart';
 import '../providers/product_provider.dart';
 
@@ -35,7 +37,9 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
-    _shareSubscription = ShareService.instance.onSharedContentAvailable.listen((_) {
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    _shareSubscription =
+        ShareService.instance.onSharedContentAvailable.listen((_) {
       _openAddScreenIfSharedContentExists();
     });
   }
@@ -47,14 +51,30 @@ class _MainShellState extends State<MainShell> {
     _checkedPendingShare = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _openAddScreenIfSharedContentExists();
+      _refreshSharePayloadFromNative();
     });
   }
 
   @override
   void dispose() {
     _shareSubscription?.cancel();
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     super.dispose();
+  }
+
+  late final WidgetsBindingObserver _lifecycleObserver =
+      _MainShellLifecycleObserver(onResume: _refreshSharePayloadFromNative);
+
+  Future<void> _refreshSharePayloadFromNative() async {
+    final userId =
+        Provider.of<AuthProvider>(context, listen: false).resolvedUserId;
+    if (userId != null && userId.isNotEmpty) {
+      unawaited(MetricsService.instance.touchDailyStreak(userId: userId));
+      unawaited(BadgesService.instance.evaluateAndSync(userId));
+    }
+    await ShareService.instance.refreshPendingSharedContent();
+    if (!mounted) return;
+    await _openAddScreenIfSharedContentExists();
   }
 
   Future<void> _openAddScreenIfSharedContentExists() async {
@@ -78,6 +98,13 @@ class _MainShellState extends State<MainShell> {
         MaterialPageRoute(builder: (_) => const AddProductScreen()),
       );
     } else if (index == 3) {
+      if (_currentIndex != 3) {
+        final userId =
+            Provider.of<AuthProvider>(context, listen: false).resolvedUserId;
+        if (userId != null && userId.isNotEmpty) {
+          unawaited(MetricsService.instance.trackTrendVisit(userId: userId));
+        }
+      }
       setState(() {
         _currentIndex = 3;
       });
@@ -86,7 +113,8 @@ class _MainShellState extends State<MainShell> {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
         final userId = authProvider.resolvedUserId;
         if (userId != null && userId.isNotEmpty) {
-          Provider.of<ProductProvider>(context, listen: false).loadUserProducts(userId);
+          Provider.of<ProductProvider>(context, listen: false)
+              .loadUserProducts(userId);
         }
       }
       setState(() {
@@ -123,7 +151,8 @@ class _MainShellState extends State<MainShell> {
                 _buildNavItem(Icons.home_outlined, Icons.home, 0),
                 _buildNavItem(Icons.search, Icons.search, 1),
                 const SizedBox(width: 60), // Space for FAB
-                _buildNavItem(Icons.auto_awesome_outlined, Icons.auto_awesome, 3),
+                _buildNavItem(
+                    Icons.auto_awesome_outlined, Icons.auto_awesome, 3),
                 _buildNavItem(Icons.person_outline, Icons.person, 4),
               ],
             ),
@@ -148,5 +177,18 @@ class _MainShellState extends State<MainShell> {
       ),
       onPressed: () => _onTabTapped(index),
     );
+  }
+}
+
+class _MainShellLifecycleObserver with WidgetsBindingObserver {
+  final Future<void> Function() onResume;
+
+  _MainShellLifecycleObserver({required this.onResume});
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      onResume();
+    }
   }
 }

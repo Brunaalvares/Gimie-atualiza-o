@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../providers/product_provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/metrics_service.dart';
 import '../widgets/user_avatar.dart';
 import 'user_profile_screen.dart';
 
@@ -29,6 +30,13 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _performSearch(String query) {
+    final userId =
+        Provider.of<AuthProvider>(context, listen: false).resolvedUserId;
+    if (userId != null && query.trim().length >= 2) {
+      unawaited(
+        MetricsService.instance.trackSearch(userId: userId, query: query),
+      );
+    }
     Provider.of<ProductProvider>(context, listen: false).searchProducts(query);
     _searchUsers(query);
   }

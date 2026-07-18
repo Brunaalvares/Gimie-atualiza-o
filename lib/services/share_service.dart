@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/debug_helper.dart';
@@ -51,6 +51,11 @@ class ShareService {
     } catch (e) {
       DebugHelper.logError('Error handling native call', e);
     }
+  }
+
+  /// Re-verifica conteúdo partilhado pendente no App Group (chamado no resume).
+  Future<void> refreshPendingSharedContent() async {
+    await _checkForPendingSharedContent();
   }
 
   Future<void> _checkForPendingSharedContent() async {
@@ -166,7 +171,8 @@ class ShareService {
       if (imageBytes != null && imageBytes.isNotEmpty) {
         await prefs.setString('shared_image', base64Encode(imageBytes));
         hasContent = true;
-        DebugHelper.log('Saved shared image (${imageBytes.length} bytes)', 'SHARE');
+        DebugHelper.log(
+            'Saved shared image (${imageBytes.length} bytes)', 'SHARE');
       }
 
       if (hasContent) {

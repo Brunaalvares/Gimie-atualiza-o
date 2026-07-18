@@ -6,6 +6,7 @@ import 'screens/splash_screen.dart';
 import 'providers/product_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/scraping_provider.dart';
+import 'providers/badges_provider.dart';
 import 'services/share_service.dart';
 
 void main() async {
@@ -43,6 +44,7 @@ class GimieApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()),
         ChangeNotifierProvider(create: (_) => ScrapingProvider()),
+        ChangeNotifierProvider(create: (_) => BadgesProvider()),
       ],
       child: MaterialApp(
         title: 'Gimie',

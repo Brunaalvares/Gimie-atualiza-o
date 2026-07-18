@@ -12,6 +12,9 @@ import 'follow_users_screen.dart';
 import 'follow_list_screen.dart';
 import 'folder_products_screen.dart';
 import 'login_screen.dart';
+import '../providers/badges_provider.dart';
+import '../widgets/badges_panel.dart';
+import '../widgets/profile_metrics_panel.dart';
 import '../widgets/profile_notifications_panel.dart';
 import '../widgets/user_avatar.dart';
 
@@ -23,6 +26,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FirebaseService _firebaseService = FirebaseService();
   final TextEditingController _bioController = TextEditingController();
   final FocusNode _bioFocusNode = FocusNode();
@@ -34,6 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isEditingBio = false;
   String? _loadedProductsForUserId;
   String? _loadedFollowStatsForUserId;
+  String? _badgesBoundForUserId;
   String _lastSyncedBio = '';
   StreamSubscription<int>? _followersSub;
   StreamSubscription<int>? _followingSub;
@@ -712,6 +717,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _loadFollowStatsIfNeeded();
           });
         }
+        if (_badgesBoundForUserId != resolvedUserId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _badgesBoundForUserId = resolvedUserId;
+            final badges = Provider.of<BadgesProvider>(context, listen: false);
+            unawaited(badges.bindUser(resolvedUserId));
+            unawaited(badges.refresh(resolvedUserId));
+          });
+        }
 
         final currentBio = user.bio?.trim() ?? '';
         if (!_bioFocusNode.hasFocus && _lastSyncedBio != currentBio) {
@@ -750,502 +764,614 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final occupiedFolderNamesLower =
             productsByCategory.keys.map((k) => k.trim().toLowerCase()).toSet();
 
-        return DefaultTabController(
-          length: 2,
-          child: Scaffold(
-            appBar: AppBar(
-              title: profileAppBarTitle,
-              backgroundColor: Colors.white,
-              elevation: 0,
-              centerTitle: true,
-              bottom: const TabBar(
-                labelColor: Color(0xFF6B2C5C),
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: Color(0xFF6B2C5C),
-                tabs: [
-                  Tab(text: 'Perfil'),
-                  Tab(text: 'Notificações'),
-                ],
+        return Scaffold(
+          key: _scaffoldKey,
+          appBar: AppBar(
+            title: profileAppBarTitle,
+            backgroundColor: Colors.white,
+            elevation: 0,
+            centerTitle: true,
+            actions: [
+              _buildMenuDrawerButton(resolvedUserId),
+              IconButton(
+                icon: const Icon(Icons.logout, color: Color(0xFF6B2C5C)),
+                onPressed: _handleLogout,
               ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.logout, color: Color(0xFF6B2C5C)),
-                  onPressed: _handleLogout,
-                ),
-              ],
-            ),
-            body: TabBarView(
+            ],
+          ),
+          endDrawer: _ProfileMenuDrawer(userId: resolvedUserId),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: Column(
               children: [
-                SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 22),
-                      Stack(
-                        children: [
-                          GestureDetector(
-                            onTap: _isUploadingPhoto
-                                ? null
-                                : _pickAndUploadProfilePhoto,
-                            child: UserAvatar(
-                              name: user.name,
-                              photoUrl: user.photoUrl,
-                              radius: 54,
-                              textStyle: const TextStyle(
-                                fontSize: 32,
+                const SizedBox(height: 22),
+                Stack(
+                  children: [
+                    GestureDetector(
+                      onTap:
+                          _isUploadingPhoto ? null : _pickAndUploadProfilePhoto,
+                      child: UserAvatar(
+                        name: user.name,
+                        photoUrl: user.photoUrl,
+                        radius: 54,
+                        textStyle: const TextStyle(
+                          fontSize: 32,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF6B2C5C),
+                          shape: BoxShape.circle,
+                        ),
+                        child: _isUploadingPhoto
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.camera_alt_outlined,
                                 color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                                size: 16,
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Toque para atualizar foto',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  user.name,
+                  style: const TextStyle(
+                    fontFamily: 'Raleway',
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  '@${user.username}',
+                  style: const TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Biografia',
+                              style: TextStyle(
+                                fontFamily: 'Raleway',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF6B2C5C),
                               ),
                             ),
                           ),
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF6B2C5C),
-                                shape: BoxShape.circle,
+                          if (!_isEditingBio)
+                            TextButton.icon(
+                              onPressed: () => _startEditingBio(currentBio),
+                              icon: const Icon(Icons.edit_outlined, size: 18),
+                              label: const Text('Editar'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF6B2C5C),
                               ),
-                              child: _isUploadingPhoto
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_isEditingBio) ...[
+                        TextField(
+                          controller: _bioController,
+                          focusNode: _bioFocusNode,
+                          minLines: 2,
+                          maxLines: 4,
+                          maxLength: 180,
+                          decoration: const InputDecoration(
+                            hintText: 'Escreva sua biografia...',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: _isSavingBio
+                                  ? null
+                                  : () => _cancelEditingBio(currentBio),
+                              child: const Text('Cancelar'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: _isSavingBio ? null : _saveBio,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF6B2C5C),
+                                foregroundColor: Colors.white,
+                              ),
+                              child: _isSavingBio
                                   ? const SizedBox(
-                                      width: 14,
-                                      height: 14,
+                                      width: 16,
+                                      height: 16,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
                                         color: Colors.white,
                                       ),
                                     )
-                                  : const Icon(
-                                      Icons.camera_alt_outlined,
-                                      color: Colors.white,
-                                      size: 16,
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Toque para atualizar foto',
-                        style: TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        user.name,
-                        style: const TextStyle(
-                          fontFamily: 'Raleway',
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        '@${user.username}',
-                        style: const TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Expanded(
-                                  child: Text(
-                                    'Biografia',
-                                    style: TextStyle(
-                                      fontFamily: 'Raleway',
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF6B2C5C),
-                                    ),
-                                  ),
-                                ),
-                                if (!_isEditingBio)
-                                  TextButton.icon(
-                                    onPressed: () =>
-                                        _startEditingBio(currentBio),
-                                    icon: const Icon(Icons.edit_outlined,
-                                        size: 18),
-                                    label: const Text('Editar'),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: const Color(0xFF6B2C5C),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            if (_isEditingBio) ...[
-                              TextField(
-                                controller: _bioController,
-                                focusNode: _bioFocusNode,
-                                minLines: 2,
-                                maxLines: 4,
-                                maxLength: 180,
-                                decoration: const InputDecoration(
-                                  hintText: 'Escreva sua biografia...',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  TextButton(
-                                    onPressed: _isSavingBio
-                                        ? null
-                                        : () => _cancelEditingBio(currentBio),
-                                    child: const Text('Cancelar'),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ElevatedButton(
-                                    onPressed: _isSavingBio ? null : _saveBio,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF6B2C5C),
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    child: _isSavingBio
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : const Text('Salvar'),
-                                  ),
-                                ],
-                              ),
-                            ] else
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  color: Colors.grey.withValues(alpha: 0.12),
-                                ),
-                                child: Text(
-                                  currentBio.isEmpty
-                                      ? 'Adicione uma bio para as pessoas te conhecerem melhor.'
-                                      : currentBio,
-                                  style: TextStyle(
-                                    fontFamily: 'Roboto',
-                                    fontSize: 14,
-                                    color: currentBio.isEmpty
-                                        ? Colors.grey.shade700
-                                        : const Color(0xFF191919),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _ProfileStatItem(
-                              label: 'Seguidores',
-                              value: _isLoadingFollowStats
-                                  ? '-'
-                                  : _followersCount.toString(),
-                              onTap: _isLoadingFollowStats
-                                  ? null
-                                  : () => _openFollowList(showFollowers: true),
-                            ),
-                            _ProfileStatItem(
-                              label: 'Seguindo',
-                              value: _isLoadingFollowStats
-                                  ? '-'
-                                  : _followingCount.toString(),
-                              onTap: _isLoadingFollowStats
-                                  ? null
-                                  : () => _openFollowList(showFollowers: false),
-                            ),
-                            _ProfileStatItem(
-                              label: 'Pastas',
-                              value: productsByCategory.length.toString(),
+                                  : const Text('Salvar'),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () => _editProfileIdentity(
-                              currentName: user.name,
-                              currentUsername: user.username,
-                            ),
-                            icon: const Icon(Icons.edit_outlined),
-                            label: const Text('Editar perfil'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF6B2C5C),
-                              side: const BorderSide(color: Color(0xFF6B2C5C)),
-                            ),
+                      ] else
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
                           ),
-                          OutlinedButton.icon(
-                            onPressed: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) => const FollowUsersScreen()),
-                              );
-                              if (!mounted) return;
-                              _loadFollowStats();
-                            },
-                            icon: const Icon(Icons.group_add_outlined),
-                            label: const Text('Gerenciar seguidores'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF6B2C5C),
-                              side: const BorderSide(color: Color(0xFF6B2C5C)),
-                            ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.grey.withValues(alpha: 0.12),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 28),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Pastas',
-                                style: TextStyle(
-                                  fontFamily: 'Raleway',
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF6B2C5C),
-                                ),
-                              ),
-                            ),
-                            TextButton.icon(
-                              onPressed: productProvider.isLoading
-                                  ? null
-                                  : () => _showCreateFolderDialog(
-                                        occupiedNamesLower:
-                                            occupiedFolderNamesLower,
-                                      ),
-                              icon: const Icon(Icons.create_new_folder_outlined,
-                                  size: 20),
-                              label: const Text('Nova pasta'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF6B2C5C),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (productProvider.isLoading)
-                        const Padding(
-                          padding: EdgeInsets.all(32),
-                          child: CircularProgressIndicator(),
-                        )
-                      else if (orderedCategories.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(32),
                           child: Text(
-                            'Você ainda não possui pastas',
+                            currentBio.isEmpty
+                                ? 'Adicione uma bio para as pessoas te conhecerem melhor.'
+                                : currentBio,
                             style: TextStyle(
                               fontFamily: 'Roboto',
-                              fontSize: 16,
-                              color: Colors.grey,
+                              fontSize: 14,
+                              color: currentBio.isEmpty
+                                  ? Colors.grey.shade700
+                                  : const Color(0xFF191919),
                             ),
                           ),
-                        )
-                      else
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: orderedCategories.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final category = orderedCategories[index];
-                            final categoryProducts =
-                                productsByCategory[category]!;
-                            final coverImage = categoryProducts.isNotEmpty
-                                ? categoryProducts.first.imageUrl
-                                : '';
-
-                            return Material(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(16),
-                                onTap: () {
-                                  final provider = Provider.of<ProductProvider>(
-                                    context,
-                                    listen: false,
-                                  );
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => FolderProductsScreen(
-                                        categoryName: category,
-                                        products: categoryProducts,
-                                        allowDelete: true,
-                                        onDeleteProduct: (product) async {
-                                          return provider
-                                              .deleteProduct(product.id);
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.08),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: Container(
-                                          width: 46,
-                                          height: 46,
-                                          color: const Color(0xFF8B7FB8)
-                                              .withValues(alpha: 0.15),
-                                          child: coverImage.isEmpty
-                                              ? const Icon(
-                                                  Icons.folder_outlined,
-                                                  color: Color(0xFF6B2C5C),
-                                                )
-                                              : Image.network(
-                                                  coverImage,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (context, error,
-                                                      stackTrace) {
-                                                    return const Icon(
-                                                      Icons.folder_outlined,
-                                                      color: Color(0xFF6B2C5C),
-                                                    );
-                                                  },
-                                                ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              category,
-                                              style: const TextStyle(
-                                                fontFamily: 'Raleway',
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              categoryProducts.isEmpty
-                                                  ? 'Pasta vazia — adicione produtos quando quiser'
-                                                  : '${categoryProducts.length} produtos salvos',
-                                              style: const TextStyle(
-                                                fontFamily: 'Roboto',
-                                                color: Colors.grey,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      PopupMenuButton<String>(
-                                        onSelected: (value) {
-                                          if (value == 'rename') {
-                                            _renameFolder(
-                                              currentName: category,
-                                              categoryProducts:
-                                                  categoryProducts,
-                                              occupiedNamesLower:
-                                                  occupiedFolderNamesLower,
-                                            );
-                                          } else if (value == 'delete') {
-                                            _deleteFolder(
-                                              categoryName: category,
-                                              categoryProducts:
-                                                  categoryProducts,
-                                            );
-                                          }
-                                        },
-                                        itemBuilder: (context) => const [
-                                          PopupMenuItem<String>(
-                                            value: 'rename',
-                                            child: Text('Renomear pasta'),
-                                          ),
-                                          PopupMenuItem<String>(
-                                            value: 'delete',
-                                            child: Text('Apagar pasta'),
-                                          ),
-                                        ],
-                                        icon: const Icon(Icons.more_vert),
-                                      ),
-                                      const Icon(Icons.chevron_right),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
                         ),
-                      const SizedBox(height: 32),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Column(
-                          children: [
-                            const Divider(),
-                            const SizedBox(height: 4),
-                            TextButton(
-                              onPressed: () =>
-                                  _showDeleteAccountDialog(context, user),
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.red.shade700,
-                              ),
-                              child: const Text('Apagar minha conta'),
-                            ),
-                          ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _ProfileStatItem(
+                        label: 'Seguidores',
+                        value: _isLoadingFollowStats
+                            ? '-'
+                            : _followersCount.toString(),
+                        onTap: _isLoadingFollowStats
+                            ? null
+                            : () => _openFollowList(showFollowers: true),
+                      ),
+                      _ProfileStatItem(
+                        label: 'Seguindo',
+                        value: _isLoadingFollowStats
+                            ? '-'
+                            : _followingCount.toString(),
+                        onTap: _isLoadingFollowStats
+                            ? null
+                            : () => _openFollowList(showFollowers: false),
+                      ),
+                      _ProfileStatItem(
+                        label: 'Pastas',
+                        value: productsByCategory.length.toString(),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _editProfileIdentity(
+                        currentName: user.name,
+                        currentUsername: user.username,
+                      ),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Editar perfil'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF6B2C5C),
+                        side: const BorderSide(color: Color(0xFF6B2C5C)),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const FollowUsersScreen()),
+                        );
+                        if (!mounted) return;
+                        _loadFollowStats();
+                      },
+                      icon: const Icon(Icons.group_add_outlined),
+                      label: const Text('Gerenciar seguidores'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF6B2C5C),
+                        side: const BorderSide(color: Color(0xFF6B2C5C)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Pastas',
+                          style: TextStyle(
+                            fontFamily: 'Raleway',
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF6B2C5C),
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: productProvider.isLoading
+                            ? null
+                            : () => _showCreateFolderDialog(
+                                  occupiedNamesLower: occupiedFolderNamesLower,
+                                ),
+                        icon: const Icon(Icons.create_new_folder_outlined,
+                            size: 20),
+                        label: const Text('Nova pasta'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF6B2C5C),
                         ),
                       ),
                     ],
                   ),
                 ),
-                ProfileNotificationsPanel(userId: resolvedUserId),
+                const SizedBox(height: 12),
+                if (productProvider.isLoading)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: CircularProgressIndicator(),
+                  )
+                else if (orderedCategories.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Text(
+                      'Você ainda não possui pastas',
+                      style: TextStyle(
+                        fontFamily: 'Roboto',
+                        fontSize: 16,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: orderedCategories.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final category = orderedCategories[index];
+                      final categoryProducts = productsByCategory[category]!;
+                      final coverImage = categoryProducts.isNotEmpty
+                          ? categoryProducts.first.imageUrl
+                          : '';
+
+                      return Material(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            final provider = Provider.of<ProductProvider>(
+                              context,
+                              listen: false,
+                            );
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => FolderProductsScreen(
+                                  categoryName: category,
+                                  products: categoryProducts,
+                                  allowDelete: true,
+                                  onDeleteProduct: (product) async {
+                                    return provider.deleteProduct(product.id);
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.08),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    width: 46,
+                                    height: 46,
+                                    color: const Color(0xFF8B7FB8)
+                                        .withValues(alpha: 0.15),
+                                    child: coverImage.isEmpty
+                                        ? const Icon(
+                                            Icons.folder_outlined,
+                                            color: Color(0xFF6B2C5C),
+                                          )
+                                        : Image.network(
+                                            coverImage,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
+                                              return const Icon(
+                                                Icons.folder_outlined,
+                                                color: Color(0xFF6B2C5C),
+                                              );
+                                            },
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        category,
+                                        style: const TextStyle(
+                                          fontFamily: 'Raleway',
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        categoryProducts.isEmpty
+                                            ? 'Pasta vazia — adicione produtos quando quiser'
+                                            : '${categoryProducts.length} produtos salvos',
+                                        style: const TextStyle(
+                                          fontFamily: 'Roboto',
+                                          color: Colors.grey,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuButton<String>(
+                                  onSelected: (value) {
+                                    if (value == 'rename') {
+                                      _renameFolder(
+                                        currentName: category,
+                                        categoryProducts: categoryProducts,
+                                        occupiedNamesLower:
+                                            occupiedFolderNamesLower,
+                                      );
+                                    } else if (value == 'delete') {
+                                      _deleteFolder(
+                                        categoryName: category,
+                                        categoryProducts: categoryProducts,
+                                      );
+                                    }
+                                  },
+                                  itemBuilder: (context) => const [
+                                    PopupMenuItem<String>(
+                                      value: 'rename',
+                                      child: Text('Renomear pasta'),
+                                    ),
+                                    PopupMenuItem<String>(
+                                      value: 'delete',
+                                      child: Text('Apagar pasta'),
+                                    ),
+                                  ],
+                                  icon: const Icon(Icons.more_vert),
+                                ),
+                                const Icon(Icons.chevron_right),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                const SizedBox(height: 32),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: [
+                      const Divider(),
+                      const SizedBox(height: 4),
+                      TextButton(
+                        onPressed: () =>
+                            _showDeleteAccountDialog(context, user),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red.shade700,
+                        ),
+                        child: const Text('Apagar minha conta'),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMenuDrawerButton(String userId) {
+    return StreamBuilder<int>(
+      stream: _firebaseService.getUnreadNotificationsCountStream(userId),
+      builder: (context, snapshot) {
+        final unread = snapshot.data ?? 0;
+        final hasUnread = unread > 0;
+        return IconButton(
+          tooltip: 'Menu do perfil',
+          onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(
+                Icons.notifications_none_outlined,
+                color: Color(0xFF6B2C5C),
+              ),
+              if (hasUnread)
+                const Positioned(
+                  right: -1,
+                  top: -1,
+                  child: CircleAvatar(
+                    radius: 5,
+                    backgroundColor: Color(0xFF2D8CFF),
+                  ),
+                ),
+              const Positioned(
+                right: -12,
+                top: 2,
+                child: Icon(
+                  Icons.menu_open,
+                  size: 12,
+                  color: Color(0xFF6B2C5C),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProfileMenuDrawer extends StatefulWidget {
+  final String userId;
+
+  const _ProfileMenuDrawer({required this.userId});
+
+  @override
+  State<_ProfileMenuDrawer> createState() => _ProfileMenuDrawerState();
+}
+
+class _ProfileMenuDrawerState extends State<_ProfileMenuDrawer>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  final FirebaseService _firebaseService = FirebaseService();
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_handleTabChange);
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_handleTabChange);
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _handleTabChange() {
+    if (_tabController.index == 1 && !_tabController.indexIsChanging) {
+      unawaited(_firebaseService.markAllNotificationsAsRead(widget.userId));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      width: MediaQuery.of(context).size.width * 0.9,
+      child: SafeArea(
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Menu do Perfil',
+                  style: TextStyle(
+                    fontFamily: 'Raleway',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 20,
+                    color: Color(0xFF6B2C5C),
+                  ),
+                ),
+              ),
+            ),
+            TabBar(
+              controller: _tabController,
+              labelColor: const Color(0xFF6B2C5C),
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: const Color(0xFF6B2C5C),
+              tabs: const [
+                Tab(text: 'Badges'),
+                Tab(text: 'Notificações'),
+                Tab(text: 'Métricas'),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  Consumer<BadgesProvider>(
+                    builder: (context, provider, _) {
+                      return BadgesPanel(
+                        badges: provider.badges,
+                        isLoading: provider.isLoading,
+                        errorMessage: provider.errorMessage,
+                      );
+                    },
+                  ),
+                  ProfileNotificationsPanel(
+                    userId: widget.userId,
+                    markAsReadOnInit: false,
+                  ),
+                  ProfileMetricsPanel(userId: widget.userId),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

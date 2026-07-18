@@ -1211,6 +1211,9 @@ PODS:
   - Firebase/Firestore (12.12.0):
     - Firebase/CoreOnly
     - FirebaseFirestore (~> 12.12.0)
+  - Firebase/Messaging (12.12.0):
+    - Firebase/CoreOnly
+    - FirebaseMessaging (~> 12.12.0)
   - Firebase/Storage (12.12.0):
     - Firebase/CoreOnly
     - FirebaseStorage (~> 12.12.0)
@@ -1220,6 +1223,10 @@ PODS:
     - Flutter
   - firebase_core (4.7.0):
     - Firebase/CoreOnly (= 12.12.0)
+    - Flutter
+  - firebase_messaging (16.2.0):
+    - Firebase/Messaging (= 12.12.0)
+    - firebase_core
     - Flutter
   - firebase_storage (13.3.0):
     - Firebase/Storage (= 12.12.0)
@@ -1287,6 +1294,15 @@ PODS:
     - GoogleUtilities/Environment (~> 8.1)
     - GoogleUtilities/UserDefaults (~> 8.1)
     - PromisesObjC (~> 2.4)
+  - FirebaseMessaging (12.12.0):
+    - FirebaseCore (~> 12.12.0)
+    - FirebaseInstallations (~> 12.12.0)
+    - GoogleDataTransport (~> 10.1)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/Environment (~> 8.1)
+    - GoogleUtilities/Reachability (~> 8.1)
+    - GoogleUtilities/UserDefaults (~> 8.1)
+    - nanopb (~> 3.30910.0)
   - FirebaseSharedSwift (12.12.0)
   - FirebaseStorage (12.12.1):
     - FirebaseAppCheckInterop (~> 12.12.0)
@@ -1323,6 +1339,9 @@ PODS:
     - GoogleUtilities/Network (~> 8.1)
     - "GoogleUtilities/NSData+zlib (~> 8.1)"
     - nanopb (~> 3.30910.0)
+  - GoogleDataTransport (10.1.0):
+    - nanopb (~> 3.30910.0)
+    - PromisesObjC (~> 2.4)
   - GoogleUtilities/AppDelegateSwizzler (8.1.0):
     - GoogleUtilities/Environment
     - GoogleUtilities/Logger
@@ -1473,6 +1492,7 @@ DEPENDENCIES:
   - Firebase/Storage
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
+  - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
   - firebase_storage (from `.symlinks/plugins/firebase_storage/ios`)
   - Flutter (from `Flutter`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
@@ -1496,10 +1516,12 @@ SPEC REPOS:
     - FirebaseFirestore
     - FirebaseFirestoreInternal
     - FirebaseInstallations
+    - FirebaseMessaging
     - FirebaseSharedSwift
     - FirebaseStorage
     - GoogleAdsOnDeviceConversion
     - GoogleAppMeasurement
+    - GoogleDataTransport
     - GoogleUtilities
     - "gRPC-C++"
     - gRPC-Core
@@ -1516,6 +1538,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/firebase_auth/ios"
   firebase_core:
     :path: ".symlinks/plugins/firebase_core/ios"
+  firebase_messaging:
+    :path: ".symlinks/plugins/firebase_messaging/ios"
   firebase_storage:
     :path: ".symlinks/plugins/firebase_storage/ios"
   Flutter:
@@ -1538,6 +1562,7 @@ SPEC CHECKSUMS:
   Firebase: aa154fee4e9b8eac17aa42344988865b3e857d33
   firebase_auth: b0aa0a5964e23fba1bf7f32603437edc33b889c4
   firebase_core: 9156a152117c843440b0b990c785aa0259bc5447
+  firebase_messaging: 0d962ab44ff24ed36deb8fa2ee043c4671858269
   firebase_storage: ef547439afc96fe8ee856de3878ed28e1c5a88e8
   FirebaseAnalytics: a5f875a3cb86be4b4b5a8c0c4a8cb8d6d99d2de9
   FirebaseAppCheckInterop: c63ae0d003274f145174849c545ab861593beaf9
@@ -1549,11 +1574,13 @@ SPEC CHECKSUMS:
   FirebaseFirestore: 01e964d312cf17e56925c955b19798848775a7fd
   FirebaseFirestoreInternal: 9d9fd7eadbe0f19310fd7df06470a04baeaf3f36
   FirebaseInstallations: 4e6e162aa4abaaeeeb01dd00179dfc5ad9c2194e
+  FirebaseMessaging: 341004946fa7ffc741344b20f1b667514fc93e31
   FirebaseSharedSwift: bccaff90721d14bafc14be34f28b77fdd7c91dc9
   FirebaseStorage: b3682c96ae7016420c1f6eb43d45057a0e909c9f
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   GoogleAdsOnDeviceConversion: 914d95386d0dd6815e8b1d70c465fe1d13312a1e
   GoogleAppMeasurement: f0781decd2e148270c47caec6cafb33775dbf657
+  GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   "gRPC-C++": cc207623316fb041a7a3e774c252cf68a058b9e8
   gRPC-Core: 860978b7db482de8b4f5e10677216309b5ff6330

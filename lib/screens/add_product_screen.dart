@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/product_provider.dart';
 import '../providers/auth_provider.dart';
-import '../services/share_service.dart';
 import '../services/api_service.dart';
 import '../services/scraping_service.dart';
 import '../utils/debug_helper.dart';
@@ -51,7 +50,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         _loadExistingUserCategories();
       }
     });
-    _checkForSharedContent();
+    // Share flow opens ShareProductPreviewScreen — do not consume shared content here.
   }
 
   @override
@@ -145,79 +144,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
       }
       _newCategoryController.clear();
     });
-  }
-
-  Future<void> _checkForSharedContent() async {
-    try {
-      final sharedContent = await ShareService.instance.getSharedContent();
-      
-      if (sharedContent != null && mounted) {
-        String? sharedUrl;
-        setState(() {
-          if (sharedContent['text'] != null) {
-            final text = sharedContent['text'] as String;
-            if (text.trim().isNotEmpty) {
-              _descriptionController.text = text;
-            }
-          }
-          
-          if (sharedContent['url'] != null) {
-            final url = sharedContent['url'] as String;
-            if (url.trim().isNotEmpty) {
-              _urlController.text = url;
-              sharedUrl = url;
-            }
-          }
-          
-        });
-        
-        // Limpa o conteúdo compartilhado após usar
-        await ShareService.instance.clearSharedContent();
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Conteúdo compartilhado carregado! Selecione a pasta para salvar.'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-
-        if (sharedUrl != null && sharedUrl!.isNotEmpty && mounted) {
-          final normalizedSharedUrl = _normalizeProductUrl(sharedUrl!);
-          final fallbackTitle = _buildFallbackNameFromUrl(normalizedSharedUrl);
-          setState(() {
-            _isShareUrlFlow = true;
-            _awaitingShareFolderSelection = true;
-            _selectedCategory = null;
-            // Show an immediate card so shared-link flow never looks empty.
-            _scrapedData = ScrapedProductData(
-              title: fallbackTitle,
-              description: 'Produto adicionado via link.',
-              price: null,
-              priceDisplay: 'Preço indisponível',
-              imageUrl: _fallbackImageUrl,
-              sourceUrl: normalizedSharedUrl,
-              scrapedAt: DateTime.now(),
-            );
-            _showScrapingPreview = true;
-          });
-          await _scrapeUrlData();
-        }
-      }
-    } catch (e) {
-      DebugHelper.logError('Erro ao verificar conteúdo compartilhado', e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erro ao carregar conteúdo compartilhado'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
   }
 
   Future<void> _handleSubmit() async {

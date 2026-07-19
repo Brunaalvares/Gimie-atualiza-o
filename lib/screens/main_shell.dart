@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'home_screen.dart';
 import 'add_product_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
 import 'trends_screen.dart';
-import '../services/share_service.dart';
+import '../services/share_flow_coordinator.dart';
 import '../services/metrics_service.dart';
 import '../services/badges_service.dart';
 import '../providers/auth_provider.dart';
@@ -21,10 +23,10 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
+  static const String _lastTabPrefsKey = 'main_shell_last_tab_index';
+
   int _currentIndex = 0;
   bool _checkedPendingShare = false;
-  bool _isOpeningShareFlow = false;
-  StreamSubscription<void>? _shareSubscription;
 
   final List<Widget> _screens = [
     const HomeScreen(),
@@ -38,10 +40,7 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
-    _shareSubscription =
-        ShareService.instance.onSharedContentAvailable.listen((_) {
-      _openAddScreenIfSharedContentExists();
-    });
+    _restoreLastTab();
   }
 
   @override
@@ -51,45 +50,55 @@ class _MainShellState extends State<MainShell> {
     _checkedPendingShare = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _refreshSharePayloadFromNative();
+      _onAppBecameActive();
     });
   }
 
   @override
   void dispose() {
-    _shareSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     super.dispose();
   }
 
   late final WidgetsBindingObserver _lifecycleObserver =
-      _MainShellLifecycleObserver(onResume: _refreshSharePayloadFromNative);
+      _MainShellLifecycleObserver(
+    onResume: _onAppBecameActive,
+    onPause: _persistCurrentTab,
+  );
 
-  Future<void> _refreshSharePayloadFromNative() async {
+  Future<void> _restoreLastTab() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getInt(_lastTabPrefsKey);
+      if (!mounted || saved == null) return;
+      if (saved == 0 || saved == 1 || saved == 3 || saved == 4) {
+        setState(() => _currentIndex = saved);
+      }
+    } catch (_) {
+      // Ignore restore failures; default tab is fine.
+    }
+  }
+
+  Future<void> _persistCurrentTab() async {
+    final index = _currentIndex;
+    if (index != 0 && index != 1 && index != 3 && index != 4) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_lastTabPrefsKey, index);
+    } catch (_) {
+      // Ignore persistence failures.
+    }
+  }
+
+  Future<void> _onAppBecameActive() async {
     final userId =
         Provider.of<AuthProvider>(context, listen: false).resolvedUserId;
     if (userId != null && userId.isNotEmpty) {
       unawaited(MetricsService.instance.touchDailyStreak(userId: userId));
       unawaited(BadgesService.instance.evaluateAndSync(userId));
     }
-    await ShareService.instance.refreshPendingSharedContent();
-    if (!mounted) return;
-    await _openAddScreenIfSharedContentExists();
-  }
-
-  Future<void> _openAddScreenIfSharedContentExists() async {
-    if (_isOpeningShareFlow) return;
-    final sharedContent = await ShareService.instance.getSharedContent();
-    if (!mounted || sharedContent == null) return;
-
-    _isOpeningShareFlow = true;
-    try {
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AddProductScreen()),
-      );
-    } finally {
-      _isOpeningShareFlow = false;
-    }
+    await _persistCurrentTab();
+    await ShareFlowCoordinator.instance.onAppResumed();
   }
 
   void _onTabTapped(int index) {
@@ -108,6 +117,7 @@ class _MainShellState extends State<MainShell> {
       setState(() {
         _currentIndex = 3;
       });
+      unawaited(_persistCurrentTab());
     } else {
       if (index == 4) {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -120,6 +130,7 @@ class _MainShellState extends State<MainShell> {
       setState(() {
         _currentIndex = index;
       });
+      unawaited(_persistCurrentTab());
     }
   }
 
@@ -182,13 +193,21 @@ class _MainShellState extends State<MainShell> {
 
 class _MainShellLifecycleObserver with WidgetsBindingObserver {
   final Future<void> Function() onResume;
+  final Future<void> Function() onPause;
 
-  _MainShellLifecycleObserver({required this.onResume});
+  _MainShellLifecycleObserver({
+    required this.onResume,
+    required this.onPause,
+  });
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       onResume();
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      onPause();
     }
   }
 }

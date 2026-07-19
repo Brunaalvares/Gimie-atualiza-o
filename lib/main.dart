@@ -8,6 +8,8 @@ import 'providers/auth_provider.dart';
 import 'providers/scraping_provider.dart';
 import 'providers/badges_provider.dart';
 import 'services/share_service.dart';
+import 'services/share_flow_coordinator.dart';
+import 'navigation/app_navigator.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +32,8 @@ void main() async {
   } catch (e) {
     debugPrint('Share Service initialization error: $e');
   }
+
+  ShareFlowCoordinator.instance.start();
   
   runApp(const GimieApp());
 }
@@ -48,6 +52,7 @@ class GimieApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Gimie',
+        navigatorKey: appNavigatorKey,
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primaryColor: const Color(0xFF8B7FB8),

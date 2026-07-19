@@ -235,6 +235,13 @@ class ShareService {
     }
   }
 
+  /// Regrava uma URL pendente (ex.: navigator ainda não estava pronto).
+  Future<void> savePendingSharedUrl(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return;
+    await _saveSharedContent(url: _stripUtmQueryParameters(trimmed));
+  }
+
   bool _isURL(String text) {
     try {
       final uri = Uri.tryParse(text.trim());

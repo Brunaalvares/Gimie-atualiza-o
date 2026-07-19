@@ -4,7 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/product_model.dart';
 import '../models/trend_models.dart';
+import '../services/firebase_service.dart';
 import '../services/trends_service.dart';
 import 'admin_trends_screen.dart';
 
@@ -17,17 +19,45 @@ class TrendsScreen extends StatefulWidget {
 }
 
 class _TrendsScreenState extends State<TrendsScreen> {
-  Future<List<TrendBoardContent>>? _future;
+  final FirebaseService _firebaseService = FirebaseService();
+  Future<_TrendsPageData>? _future;
 
   @override
   void initState() {
     super.initState();
-    _future = TrendsService.instance.fetchAllTrendsContent();
+    _future = _loadPageData();
+  }
+
+  Future<_TrendsPageData> _loadPageData() async {
+    final results = await Future.wait<dynamic>([
+      TrendsService.instance.fetchAllTrendsContent(),
+      _firebaseService.getProducts(limit: 100),
+    ]);
+    final boards = results[0] as List<TrendBoardContent>;
+    final currentUserId = _firebaseService.currentUser?.uid;
+    final products = (results[1] as List<Product>)
+        .where(
+          (product) =>
+              product.userId.isNotEmpty &&
+              product.userId != currentUserId &&
+              product.imageUrl.trim().isNotEmpty,
+        )
+        .toList()
+      ..sort((a, b) {
+        final byLikes = b.likes.compareTo(a.likes);
+        if (byLikes != 0) return byLikes;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+
+    return _TrendsPageData(
+      boards: boards,
+      popularProducts: products.take(12).toList(),
+    );
   }
 
   Future<void> _reload() async {
     setState(() {
-      _future = TrendsService.instance.fetchAllTrendsContent();
+      _future = _loadPageData();
     });
     await _future;
   }
@@ -98,7 +128,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _reload,
-        child: FutureBuilder<List<TrendBoardContent>>(
+        child: FutureBuilder<_TrendsPageData>(
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -116,8 +146,8 @@ class _TrendsScreenState extends State<TrendsScreen> {
                 ],
               );
             }
-            final data = snapshot.data ?? const <TrendBoardContent>[];
-            if (data.isEmpty) {
+            final data = snapshot.data ?? const _TrendsPageData();
+            if (data.boards.isEmpty && data.popularProducts.isEmpty) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(28),
@@ -136,18 +166,149 @@ class _TrendsScreenState extends State<TrendsScreen> {
                 ],
               );
             }
-            return ListView.builder(
+            return ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-              itemCount: data.length,
-              itemBuilder: (context, i) {
-                final block = data[i];
-                return _TrendBoardBlock(
-                  content: block,
-                  onOpenUrl: _openUrl,
-                );
-              },
+              children: [
+                if (data.popularProducts.isNotEmpty)
+                  _PopularProductsSection(
+                    products: data.popularProducts,
+                    onOpenUrl: _openUrl,
+                  ),
+                ...data.boards.map(
+                  (block) => _TrendBoardBlock(
+                    content: block,
+                    onOpenUrl: _openUrl,
+                  ),
+                ),
+              ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _TrendsPageData {
+  final List<TrendBoardContent> boards;
+  final List<Product> popularProducts;
+
+  const _TrendsPageData({
+    this.boards = const [],
+    this.popularProducts = const [],
+  });
+}
+
+class _PopularProductsSection extends StatelessWidget {
+  final List<Product> products;
+  final void Function(String url) onOpenUrl;
+
+  const _PopularProductsSection({
+    required this.products,
+    required this.onOpenUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 20),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Mais desejados pela comunidade',
+              style: TextStyle(
+                fontFamily: 'Raleway',
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
+                color: Color(0xFF6B2C5C),
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Produtos salvos por outros usuários, ordenados pelos mais curtidos.',
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 13,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 250,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: products.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final product = products[index];
+                  return SizedBox(
+                    width: 150,
+                    child: InkWell(
+                      onTap: () => onOpenUrl(product.url),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: CachedNetworkImage(
+                                imageUrl: product.imageUrl,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                placeholder: (_, __) =>
+                                    Container(color: Colors.grey.shade200),
+                                errorWidget: (_, __, ___) => Container(
+                                  color: Colors.grey.shade100,
+                                  child:
+                                      const Icon(Icons.broken_image_outlined),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            product.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Roboto',
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.favorite,
+                                size: 15,
+                                color: Color(0xFF6B2C5C),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${product.likes} curtida${product.likes == 1 ? '' : 's'}',
+                                style: const TextStyle(
+                                  fontFamily: 'Roboto',
+                                  fontSize: 12,
+                                  color: Color(0xFF6B2C5C),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

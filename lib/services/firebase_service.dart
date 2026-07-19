@@ -589,6 +589,66 @@ class FirebaseService {
     }
   }
 
+  /// Top utilizadores que mais salvaram produtos nos últimos 7 dias.
+  /// Se houver menos de [limit] na semana, completa com os mais ativos no geral.
+  Future<List<UserModel>> getTopSaversOfWeek({int limit = 5}) async {
+    try {
+      final weekAgo =
+          DateTime.now().toUtc().subtract(const Duration(days: 7));
+      final weekCounts = <String, int>{};
+
+      try {
+        final weekSnapshot = await _firestore
+            .collection('products')
+            .where(
+              'createdAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(weekAgo),
+            )
+            .orderBy('createdAt', descending: true)
+            .limit(1000)
+            .get();
+
+        for (final doc in weekSnapshot.docs) {
+          final userId = (doc.data()['userId'] as String?)?.trim() ?? '';
+          if (userId.isEmpty) continue;
+          weekCounts[userId] = (weekCounts[userId] ?? 0) + 1;
+        }
+      } catch (e) {
+        debugPrint('Top savers week query error: $e');
+      }
+
+      final rankedIds = weekCounts.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final topIds = rankedIds.take(limit).map((e) => e.key).toList();
+
+      if (topIds.length < limit) {
+        final recentSnapshot = await _firestore
+            .collection('products')
+            .orderBy('createdAt', descending: true)
+            .limit(500)
+            .get();
+
+        final allTimeCounts = <String, int>{};
+        for (final doc in recentSnapshot.docs) {
+          final userId = (doc.data()['userId'] as String?)?.trim() ?? '';
+          if (userId.isEmpty || topIds.contains(userId)) continue;
+          allTimeCounts[userId] = (allTimeCounts[userId] ?? 0) + 1;
+        }
+
+        final fillers = allTimeCounts.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        for (final entry in fillers) {
+          if (topIds.length >= limit) break;
+          topIds.add(entry.key);
+        }
+      }
+
+      return _getUsersByIds(topIds);
+    } catch (e) {
+      throw Exception('Get top savers of week error: $e');
+    }
+  }
+
   Stream<List<Product>> getProductsStream({int? limit, String? category}) {
     Query<Map<String, dynamic>> query = _firestore
         .collection('products')

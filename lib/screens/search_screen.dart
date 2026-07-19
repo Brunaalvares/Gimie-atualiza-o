@@ -7,6 +7,7 @@ import '../providers/product_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/metrics_service.dart';
 import '../widgets/user_avatar.dart';
+import '../widgets/top_savers_week_section.dart';
 import 'user_profile_screen.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -120,12 +121,14 @@ class _SearchScreenState extends State<SearchScreen> {
           Expanded(
             child: Consumer2<ProductProvider, AuthProvider>(
               builder: (context, productProvider, authProvider, _) {
-                if (productProvider.isLoading) {
+                final query = _searchController.text.trim();
+                final showTopSavers = query.isEmpty;
+
+                if (productProvider.isLoading && !showTopSavers) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final showEmptyState =
-                    _searchController.text.trim().isNotEmpty &&
+                final showEmptyState = query.isNotEmpty &&
                     productProvider.products.isEmpty &&
                     !_isSearchingUsers &&
                     _userResults.isEmpty;
@@ -146,14 +149,28 @@ class _SearchScreenState extends State<SearchScreen> {
                   );
                 }
 
-                final itemCount = productProvider.products.length +
-                    (_isSearchingUsers || _userResults.isNotEmpty ? 1 : 0);
+                final showUsersSection =
+                    _isSearchingUsers || _userResults.isNotEmpty;
+                final showProducts = query.isNotEmpty || !showTopSavers;
+                final productCount =
+                    showProducts ? productProvider.products.length : 0;
+
+                final itemCount = (showTopSavers ? 1 : 0) +
+                    (showUsersSection ? 1 : 0) +
+                    productCount;
 
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: itemCount,
                   itemBuilder: (context, index) {
-                    if (_isSearchingUsers || _userResults.isNotEmpty) {
+                    if (showTopSavers) {
+                      if (index == 0) {
+                        return const TopSaversWeekSection();
+                      }
+                      index -= 1;
+                    }
+
+                    if (showUsersSection) {
                       if (index == 0) {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,7 +223,8 @@ class _SearchScreenState extends State<SearchScreen> {
                                     onTap: () async {
                                       await Navigator.of(context).push(
                                         MaterialPageRoute(
-                                          builder: (_) => UserProfileScreen(user: user),
+                                          builder: (_) =>
+                                              UserProfileScreen(user: user),
                                         ),
                                       );
                                       if (!mounted) return;
@@ -232,6 +250,11 @@ class _SearchScreenState extends State<SearchScreen> {
                         );
                       }
                       index -= 1;
+                    }
+
+                    if (index < 0 ||
+                        index >= productProvider.products.length) {
+                      return const SizedBox.shrink();
                     }
 
                     final product = productProvider.products[index];

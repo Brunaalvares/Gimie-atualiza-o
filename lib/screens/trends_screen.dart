@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -29,30 +30,39 @@ class _TrendsScreenState extends State<TrendsScreen> {
   }
 
   Future<_TrendsPageData> _loadPageData() async {
-    final results = await Future.wait<dynamic>([
-      TrendsService.instance.fetchAllTrendsContent(),
-      _firebaseService.getProducts(limit: 100),
-    ]);
-    final boards = results[0] as List<TrendBoardContent>;
-    final currentUserId = _firebaseService.currentUser?.uid;
-    final products = (results[1] as List<Product>)
-        .where(
-          (product) =>
-              product.userId.isNotEmpty &&
-              product.userId != currentUserId &&
-              product.imageUrl.trim().isNotEmpty,
-        )
-        .toList()
-      ..sort((a, b) {
+    try {
+      final results = await Future.wait<dynamic>([
+        TrendsService.instance.fetchAllTrendsContent(),
+        _firebaseService.getProducts(limit: 100),
+      ]);
+      final boards = results[0] as List<TrendBoardContent>;
+      final currentUserId = _firebaseService.currentUser?.uid;
+      final allProducts = results[1] as List<Product>;
+      
+      final products = allProducts
+          .where(
+            (product) =>
+                product.userId.isNotEmpty &&
+                product.userId != currentUserId &&
+                (product.imageUrl.isNotEmpty && 
+                 product.imageUrl.trim().isNotEmpty),
+          )
+          .toList();
+      
+      products.sort((a, b) {
         final byLikes = b.likes.compareTo(a.likes);
         if (byLikes != 0) return byLikes;
         return b.createdAt.compareTo(a.createdAt);
       });
 
-    return _TrendsPageData(
-      boards: boards,
-      popularProducts: products.take(12).toList(),
-    );
+      return _TrendsPageData(
+        boards: boards,
+        popularProducts: products.take(12).toList(),
+      );
+    } catch (e) {
+      debugPrint('Error loading trends data: $e');
+      return const _TrendsPageData();
+    }
   }
 
   Future<void> _reload() async {

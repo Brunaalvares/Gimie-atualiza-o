@@ -159,28 +159,41 @@ class BadgesService {
         .doc(userId)
         .collection('badge_progress')
         .snapshots()
-        .map((snap) {
-      final byId = {
-        for (final d in snap.docs)
-          d.id: BadgeProgress.fromFirestore(d.id, d.data()),
-      };
-      return catalog.map((def) {
-        return byId[def.id] ??
-            BadgeProgress(
-              badgeId: def.id,
-              title: def.title,
-              description: def.description,
-              category: def.category,
-              tier: def.tier,
-              target: def.target,
-              current: 0,
-              earned: false,
-              progressLabel: def.id == trendsetterBadgeId
-                  ? 'Faltam ${def.target} visualizações para desbloquear'
-                  : null,
-              isComingSoon: def.isComingSoon,
-            );
-      }).toList();
+        .handleError((error) {
+      debugPrint('Error watching badges: $error');
+      throw error;
+    }).map((snap) {
+      try {
+        final byId = <String, BadgeProgress>{};
+        for (final d in snap.docs) {
+          try {
+            byId[d.id] = BadgeProgress.fromFirestore(d.id, d.data());
+          } catch (e) {
+            debugPrint('Error parsing badge ${d.id}: $e');
+          }
+        }
+        
+        return catalog.map((def) {
+          return byId[def.id] ??
+              BadgeProgress(
+                badgeId: def.id,
+                title: def.title,
+                description: def.description,
+                category: def.category,
+                tier: def.tier,
+                target: def.target,
+                current: 0,
+                earned: false,
+                progressLabel: def.id == trendsetterBadgeId
+                    ? 'Faltam ${def.target} visualizações para desbloquear'
+                    : null,
+                isComingSoon: def.isComingSoon,
+              );
+        }).toList();
+      } catch (e) {
+        debugPrint('Error mapping badges: $e');
+        return [];
+      }
     });
   }
 

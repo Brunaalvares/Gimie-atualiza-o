@@ -70,12 +70,21 @@ class TrendsService {
   }
 
   Future<List<TrendBoardContent>> fetchAllTrendsContent() async {
-    final snap = await _boards.orderBy('sortOrder').get();
-    final out = <TrendBoardContent>[];
-    for (final d in snap.docs) {
-      out.add(await fetchBoardContent(d.id));
+    try {
+      final snap = await _boards.orderBy('sortOrder').get();
+      final out = <TrendBoardContent>[];
+      for (final d in snap.docs) {
+        try {
+          out.add(await fetchBoardContent(d.id));
+        } catch (e) {
+          debugPrint('Error fetching board ${d.id}: $e');
+        }
+      }
+      return out;
+    } catch (e) {
+      debugPrint('Error fetching trends content: $e');
+      return [];
     }
-    return out;
   }
 
   Future<int> _nextSortOrder(CollectionReference<Map<String, dynamic>> col) async {

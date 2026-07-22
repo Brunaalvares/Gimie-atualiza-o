@@ -14,6 +14,8 @@ class ShareFlowCoordinator {
   static final ShareFlowCoordinator instance = ShareFlowCoordinator._();
 
   bool _isOpening = false;
+  bool _hasOpenedInSession = false;
+  String? _lastOpenedUrl;
   StreamSubscription<void>? _subscription;
   Timer? _pollTimer;
 
@@ -35,22 +37,36 @@ class ShareFlowCoordinator {
   /// Chamado no resume / become active. Faz polling curto porque a Share
   /// Extension pode gravar o App Group alguns ms depois do app acordar.
   Future<void> onAppResumed() async {
+    // Reseta o flag de sessão para permitir novo compartilhamento
+    _hasOpenedInSession = false;
+    _lastOpenedUrl = null;
+    
     await openPreviewIfNeeded(reason: 'resume');
     _pollTimer?.cancel();
     var attempt = 0;
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 400), (timer) {
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
       attempt++;
       unawaited(openPreviewIfNeeded(reason: 'poll-$attempt'));
-      if (attempt >= 8) {
+      if (attempt >= 5 || _hasOpenedInSession) {
         timer.cancel();
       }
     });
   }
 
   Future<bool> openPreviewIfNeeded({String reason = 'manual'}) async {
+    // Proteção contra abertura simultânea
     if (_isOpening) {
       DebugHelper.log(
         'Share preview already opening (skip $reason)',
+        'SHARE_FLOW',
+      );
+      return true;
+    }
+
+    // Proteção contra abertura duplicada na mesma sessão
+    if (_hasOpenedInSession) {
+      DebugHelper.log(
+        'Share preview already opened in this session (skip $reason)',
         'SHARE_FLOW',
       );
       return true;
@@ -71,6 +87,16 @@ class ShareFlowCoordinator {
       return false;
     }
 
+    // Proteção contra duplicação da mesma URL
+    if (_lastOpenedUrl == initialUrl && _hasOpenedInSession) {
+      DebugHelper.log(
+        'Same URL already opened (skip $reason): $initialUrl',
+        'SHARE_FLOW',
+      );
+      await ShareService.instance.clearSharedContent();
+      return true;
+    }
+
     final navigator = appNavigatorKey.currentState;
     if (navigator == null) {
       DebugHelper.log(
@@ -80,18 +106,21 @@ class ShareFlowCoordinator {
       return false;
     }
 
+    // Marca como "opening" ANTES de qualquer operação assíncrona
     _isOpening = true;
+    _lastOpenedUrl = initialUrl;
+    
     DebugHelper.log(
       'Opening share preview ($reason): $initialUrl',
       'SHARE_FLOW',
     );
 
-    // Só limpa depois de confirmar que conseguimos navegar.
+    // Limpa o conteúdo compartilhado imediatamente
     await ShareService.instance.clearSharedContent();
 
     try {
       // Pequeno atraso: no resume o navigator ainda pode estar a estabilizar.
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
 
       final nav = appNavigatorKey.currentState;
       if (nav == null) {
@@ -103,6 +132,13 @@ class ShareFlowCoordinator {
         return false;
       }
 
+      // Marca como aberto ANTES de fazer o push para prevenir race conditions
+      _hasOpenedInSession = true;
+      
+      // Cancela o polling assim que começar a abrir
+      _pollTimer?.cancel();
+      _pollTimer = null;
+
       await nav.push(
         MaterialPageRoute<void>(
           fullscreenDialog: true,
@@ -113,6 +149,8 @@ class ShareFlowCoordinator {
       return true;
     } catch (e) {
       DebugHelper.logError('Failed to open share preview', e);
+      _hasOpenedInSession = false;
+      _lastOpenedUrl = null;
       await ShareService.instance.savePendingSharedUrl(initialUrl);
       return false;
     } finally {

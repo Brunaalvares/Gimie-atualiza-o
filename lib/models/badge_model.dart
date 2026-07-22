@@ -53,7 +53,22 @@ class BadgeProgress {
       try {
         return (value as dynamic).toDate() as DateTime;
       } catch (_) {
-        return DateTime.tryParse(value.toString());
+        try {
+          return DateTime.tryParse(value.toString());
+        } catch (_) {
+          return null;
+        }
+      }
+    }
+
+    int parseInt(dynamic value, int defaultValue) {
+      if (value == null) return defaultValue;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      try {
+        return int.tryParse(value.toString()) ?? defaultValue;
+      } catch (_) {
+        return defaultValue;
       }
     }
 
@@ -63,8 +78,8 @@ class BadgeProgress {
       description: data['description']?.toString() ?? '',
       category: data['category']?.toString() ?? '',
       tier: data['tier']?.toString() ?? '',
-      target: (data['target'] as num?)?.toInt() ?? 0,
-      current: (data['current'] as num?)?.toInt() ?? 0,
+      target: parseInt(data['target'], 0),
+      current: parseInt(data['current'], 0),
       earned: data['earned'] == true,
       earnedAt: parseDate(data['earnedAt']),
       updatedAt: parseDate(data['updatedAt']),

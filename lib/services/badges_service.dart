@@ -154,33 +154,56 @@ class BadgesService {
   ];
 
   Stream<List<BadgeProgress>> watchBadges(String userId) {
+    debugPrint('BADGES_SERVICE: watchBadges called for userId: $userId');
+    
     return _firestore
         .collection('users')
         .doc(userId)
         .collection('badge_progress')
         .snapshots()
-        .map((snap) {
-      final byId = {
-        for (final d in snap.docs)
-          d.id: BadgeProgress.fromFirestore(d.id, d.data()),
-      };
-      return catalog.map((def) {
-        return byId[def.id] ??
-            BadgeProgress(
-              badgeId: def.id,
-              title: def.title,
-              description: def.description,
-              category: def.category,
-              tier: def.tier,
-              target: def.target,
-              current: 0,
-              earned: false,
-              progressLabel: def.id == trendsetterBadgeId
-                  ? 'Faltam ${def.target} visualizações para desbloquear'
-                  : null,
-              isComingSoon: def.isComingSoon,
-            );
-      }).toList();
+        .handleError((error) {
+      debugPrint('BADGES_SERVICE: Error watching badges: $error');
+      throw error;
+    }).map((snap) {
+      try {
+        debugPrint('BADGES_SERVICE: Snapshot received with ${snap.docs.length} documents');
+        
+        final byId = <String, BadgeProgress>{};
+        for (final d in snap.docs) {
+          try {
+            byId[d.id] = BadgeProgress.fromFirestore(d.id, d.data());
+          } catch (e) {
+            debugPrint('BADGES_SERVICE: Error parsing badge ${d.id}: $e');
+          }
+        }
+        
+        debugPrint('BADGES_SERVICE: Successfully parsed ${byId.length} badges from Firestore');
+        
+        final result = catalog.map((def) {
+          return byId[def.id] ??
+              BadgeProgress(
+                badgeId: def.id,
+                title: def.title,
+                description: def.description,
+                category: def.category,
+                tier: def.tier,
+                target: def.target,
+                current: 0,
+                earned: false,
+                progressLabel: def.id == trendsetterBadgeId
+                    ? 'Faltam ${def.target} visualizações para desbloquear'
+                    : null,
+                isComingSoon: def.isComingSoon,
+              );
+        }).toList();
+        
+        debugPrint('BADGES_SERVICE: Returning ${result.length} badges (${catalog.length} in catalog)');
+        return result;
+      } catch (e, stackTrace) {
+        debugPrint('BADGES_SERVICE: Error mapping badges: $e');
+        debugPrint('BADGES_SERVICE: Stack trace: $stackTrace');
+        return [];
+      }
     });
   }
 

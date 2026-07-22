@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -29,30 +30,73 @@ class _TrendsScreenState extends State<TrendsScreen> {
   }
 
   Future<_TrendsPageData> _loadPageData() async {
-    final results = await Future.wait<dynamic>([
-      TrendsService.instance.fetchAllTrendsContent(),
-      _firebaseService.getProducts(limit: 100),
-    ]);
-    final boards = results[0] as List<TrendBoardContent>;
-    final currentUserId = _firebaseService.currentUser?.uid;
-    final products = (results[1] as List<Product>)
-        .where(
-          (product) =>
-              product.userId.isNotEmpty &&
-              product.userId != currentUserId &&
-              product.imageUrl.trim().isNotEmpty,
-        )
-        .toList()
-      ..sort((a, b) {
-        final byLikes = b.likes.compareTo(a.likes);
-        if (byLikes != 0) return byLikes;
-        return b.createdAt.compareTo(a.createdAt);
-      });
+    try {
+      debugPrint('=== TRENDS: Starting data load ===');
+      
+      final results = await Future.wait<dynamic>([
+        TrendsService.instance.fetchAllTrendsContent(),
+        _firebaseService.getProducts(limit: 100),
+      ]);
+      
+      final boards = results[0] as List<TrendBoardContent>;
+      final currentUserId = _firebaseService.currentUser?.uid;
+      final allProducts = results[1] as List<Product>;
+      
+      debugPrint('TRENDS: Boards loaded: ${boards.length}');
+      debugPrint('TRENDS: All products fetched: ${allProducts.length}');
+      debugPrint('TRENDS: Current user ID: $currentUserId');
+      
+      // Debug: contar produtos por filtro
+      int withUserId = 0;
+      int notCurrentUser = 0;
+      int withImage = 0;
+      
+      for (final product in allProducts) {
+        if (product.userId.isNotEmpty) withUserId++;
+        if (product.userId != currentUserId) notCurrentUser++;
+        if (product.imageUrl.isNotEmpty && product.imageUrl.trim().isNotEmpty) {
+          withImage++;
+        }
+      }
+      
+      debugPrint('TRENDS: Products with userId: $withUserId');
+      debugPrint('TRENDS: Products from other users: $notCurrentUser');
+      debugPrint('TRENDS: Products with image: $withImage');
+      
+      final products = allProducts
+          .where(
+            (product) =>
+                product.userId.isNotEmpty &&
+                product.userId != currentUserId &&
+                (product.imageUrl.isNotEmpty && 
+                 product.imageUrl.trim().isNotEmpty),
+          )
+          .toList();
+      
+      debugPrint('TRENDS: Filtered products: ${products.length}');
+      
+      if (products.isNotEmpty) {
+        products.sort((a, b) {
+          final byLikes = b.likes.compareTo(a.likes);
+          if (byLikes != 0) return byLikes;
+          return b.createdAt.compareTo(a.createdAt);
+        });
+        
+        debugPrint('TRENDS: Top product likes: ${products.first.likes}');
+      }
 
-    return _TrendsPageData(
-      boards: boards,
-      popularProducts: products.take(12).toList(),
-    );
+      final popularProducts = products.take(12).toList();
+      debugPrint('TRENDS: Popular products to display: ${popularProducts.length}');
+
+      return _TrendsPageData(
+        boards: boards,
+        popularProducts: popularProducts,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('ERROR loading trends data: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return const _TrendsPageData();
+    }
   }
 
   Future<void> _reload() async {

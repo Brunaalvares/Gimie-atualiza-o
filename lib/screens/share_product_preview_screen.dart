@@ -70,6 +70,7 @@ class _ShareProductPreviewScreenState extends State<ShareProductPreviewScreen> {
     try {
       String? url = widget.initialUrl?.trim();
 
+      // Se já recebeu URL via initialUrl, não precisa buscar novamente
       if (url == null || url.isEmpty) {
         final sharedContent = await ShareService.instance.getSharedContent();
         if (sharedContent != null) {
@@ -83,6 +84,7 @@ class _ShareProductPreviewScreenState extends State<ShareProductPreviewScreen> {
             ).firstMatch(text);
             url = match?.group(0);
           }
+          // Limpa apenas se leu do shared content (não via initialUrl)
           await ShareService.instance.clearSharedContent();
         }
       }

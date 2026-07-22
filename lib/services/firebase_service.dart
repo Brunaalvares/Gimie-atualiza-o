@@ -568,6 +568,8 @@ class FirebaseService {
 
   Future<List<Product>> getProducts({int? limit, String? category}) async {
     try {
+      debugPrint('FIREBASE: Getting products (limit: $limit, category: $category)');
+      
       Query<Map<String, dynamic>> query = _firestore
           .collection('products')
           .orderBy('createdAt', descending: true);
@@ -581,10 +583,25 @@ class FirebaseService {
       }
 
       final snapshot = await query.get();
-      return snapshot.docs
-          .map((doc) => Product.fromFirestore(doc.data(), doc.id))
+      debugPrint('FIREBASE: Products documents fetched: ${snapshot.docs.length}');
+      
+      final products = snapshot.docs
+          .map((doc) {
+            try {
+              return Product.fromFirestore(doc.data(), doc.id);
+            } catch (e) {
+              debugPrint('FIREBASE: Error parsing product ${doc.id}: $e');
+              return null;
+            }
+          })
+          .whereType<Product>()
           .toList();
-    } catch (e) {
+      
+      debugPrint('FIREBASE: Products successfully parsed: ${products.length}');
+      return products;
+    } catch (e, stackTrace) {
+      debugPrint('FIREBASE: Get products error: $e');
+      debugPrint('FIREBASE: Stack trace: $stackTrace');
       throw Exception('Get products error: $e');
     }
   }

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/badge_model.dart';
@@ -19,20 +20,31 @@ class BadgesProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   Future<void> bindUser(String userId) async {
-    if (_currentUserId == userId && _subscription != null) return;
+    debugPrint('BADGES_PROVIDER: bindUser called for: $userId');
+    
+    if (_currentUserId == userId && _subscription != null) {
+      debugPrint('BADGES_PROVIDER: Already bound to this user, skipping');
+      return;
+    }
+    
     _currentUserId = userId;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     await _subscription?.cancel();
+    
+    debugPrint('BADGES_PROVIDER: Starting to watch badges for: $userId');
+    
     _subscription = _service.watchBadges(userId).listen(
       (items) {
+        debugPrint('BADGES_PROVIDER: Received ${items.length} badges');
         _badges = items;
         _isLoading = false;
         notifyListeners();
       },
       onError: (error) {
+        debugPrint('BADGES_PROVIDER: Error watching badges: $error');
         _errorMessage = error.toString();
         _isLoading = false;
         notifyListeners();

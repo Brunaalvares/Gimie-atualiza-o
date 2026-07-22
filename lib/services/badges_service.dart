@@ -154,26 +154,32 @@ class BadgesService {
   ];
 
   Stream<List<BadgeProgress>> watchBadges(String userId) {
+    debugPrint('BADGES_SERVICE: watchBadges called for userId: $userId');
+    
     return _firestore
         .collection('users')
         .doc(userId)
         .collection('badge_progress')
         .snapshots()
         .handleError((error) {
-      debugPrint('Error watching badges: $error');
+      debugPrint('BADGES_SERVICE: Error watching badges: $error');
       throw error;
     }).map((snap) {
       try {
+        debugPrint('BADGES_SERVICE: Snapshot received with ${snap.docs.length} documents');
+        
         final byId = <String, BadgeProgress>{};
         for (final d in snap.docs) {
           try {
             byId[d.id] = BadgeProgress.fromFirestore(d.id, d.data());
           } catch (e) {
-            debugPrint('Error parsing badge ${d.id}: $e');
+            debugPrint('BADGES_SERVICE: Error parsing badge ${d.id}: $e');
           }
         }
         
-        return catalog.map((def) {
+        debugPrint('BADGES_SERVICE: Successfully parsed ${byId.length} badges from Firestore');
+        
+        final result = catalog.map((def) {
           return byId[def.id] ??
               BadgeProgress(
                 badgeId: def.id,
@@ -190,8 +196,12 @@ class BadgesService {
                 isComingSoon: def.isComingSoon,
               );
         }).toList();
-      } catch (e) {
-        debugPrint('Error mapping badges: $e');
+        
+        debugPrint('BADGES_SERVICE: Returning ${result.length} badges (${catalog.length} in catalog)');
+        return result;
+      } catch (e, stackTrace) {
+        debugPrint('BADGES_SERVICE: Error mapping badges: $e');
+        debugPrint('BADGES_SERVICE: Stack trace: $stackTrace');
         return [];
       }
     });

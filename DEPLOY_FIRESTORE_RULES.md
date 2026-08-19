@@ -1,0 +1,569 @@
+# 🚀 Instruções para Deploy das Regras de Segurança Firestore
+
+## Opção 1: Deploy via Firebase Console (Mais Rápido) ✨
+
+### Passos:
+
+1. **Acesse o Firebase Console**
+   - Vá para: https://console.firebase.google.com
+   - Selecione seu projeto Gimie
+
+2. **Navegue até Firestore Database**
+   - No menu lateral, clique em **Firestore Database**
+   - Clique na aba **Regras** (Rules)
+
+3. **Cole as Novas Regras**
+   - Copie o conteúdo do arquivo `firestore.rules` (veja abaixo)
+   - Cole no editor do console
+   - Clique em **Publicar** (Publish)
+
+4. **Confirme**
+   - Aguarde a mensagem de sucesso
+   - As regras estarão ativas imediatamente
+
+### Conteúdo Completo do firestore.rules:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Gimie — regras alinhadas ao app (utilizadores, produtos, notificações,
+    // reserva de @, curadoria Trends + admins).
+    //
+    // Deploy: firebase deploy --only firestore:rules
+    //
+    // Trends (admin): no Console cria o documento
+    //   admins/{UID_DO_FIREBASE_AUTH}  →  { "active": true }
+    // Só esse UID pode criar/editar/apagar trend_boards e subcoleções.
+    // Storage (imagens trends/) tem regras à parte em storage.rules.
+    // -------------------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function nonEmptyString(v) {
+      return v is string && v.size() > 0;
+    }
+
+    function optionalStringMax(data, key, max) {
+      return !(key in data)
+        || data[key] == null
+        || (data[key] is string && data[key].size() <= max);
+    }
+
+    /// Preço gravado pelo Flutter como double → Firestore pode expor como int ou float.
+    function validPriceField(v) {
+      return (v is int || v is float)
+        && v >= 0
+        && v <= 1000000000;
+    }
+
+    function validUserDocument(data, isCreate) {
+      return data.keys().hasAll([
+            'email', 'name', 'username', 'createdAt', 'followingIds'
+          ])
+        && data.keys().hasOnly([
+            'email', 'name', 'username', 'photoUrl', 'bio', 'birthDate',
+            'createdAt', 'lastLogin', 'followingIds', 'following', 'emptyFolders',
+            'id', 'uid'
+          ])
+        && data.email is string
+        && data.email.size() <= 320
+        && data.name is string
+        && data.name.size() <= 200
+        && data.username is string
+        && data.username.size() <= 64
+        && data.createdAt is timestamp
+        && data.followingIds is list
+        && data.followingIds.size() <= 10000
+        && (!('following' in data)
+            || (data.following is list && data.following.size() <= 10000))
+        && (!('id' in data)
+            || (data.id is string && data.id.size() <= 128))
+        && (!('uid' in data)
+            || (data.uid is string && data.uid.size() <= 128))
+        && (!('emptyFolders' in data)
+            || (data.emptyFolders is list && data.emptyFolders.size() <= 500))
+        && optionalStringMax(data, 'photoUrl', 2000)
+        && optionalStringMax(data, 'bio', 2000)
+        && (!('birthDate' in data) || data.birthDate == null || data.birthDate is timestamp)
+        && (!('lastLogin' in data) || data.lastLogin == null || data.lastLogin is timestamp)
+        && (isCreate || userEmailOk(data));
+    }
+
+    function userEmailOk(data) {
+      return !('email' in data)
+        || data.email == resource.data.email
+        || (request.auth.token.email != null && data.email == request.auth.token.email);
+    }
+
+    /// Atualização só de pastas vazias (perfil) — não exige revalidar o doc inteiro.
+    function onlyEmptyFoldersChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emptyFolders'])
+        && (!('emptyFolders' in request.resource.data)
+            || (request.resource.data.emptyFolders is list
+                && request.resource.data.emptyFolders.size() <= 500));
+    }
+
+    /// ⭐ NOVA: Atualização só de followingIds (seguir/deixar de seguir) — não exige revalidar o doc inteiro.
+    function onlyFollowingIdsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followingIds'])
+        && request.resource.data.followingIds is list
+        && request.resource.data.followingIds.size() <= 10000;
+    }
+
+    function notifPayloadValid() {
+      let d = request.resource.data;
+      let t = d.type;
+      return t is string
+        && d.actorId is string
+        && d.recipientId is string
+        && (!('isRead' in d) || d.isRead is bool)
+        && (!('readAt' in d) || d.readAt == null || d.readAt is timestamp)
+        && optionalStringMax(d, 'badgeId', 120)
+        && optionalStringMax(d, 'badgeName', 300)
+        && optionalStringMax(d, 'metricName', 120)
+        && optionalStringMax(d, 'folderName', 200)
+        && optionalStringMax(d, 'actorName', 200)
+        && optionalStringMax(d, 'actorUsername', 100)
+        && optionalStringMax(d, 'productName', 500)
+        && optionalStringMax(d, 'productId', 200)
+        && (d.createdAt == null || d.createdAt is timestamp)
+        && (
+          (t == 'follow'
+            && d.keys().hasOnly([
+              'recipientId', 'actorId', 'type',
+              'actorName', 'actorUsername', 'createdAt', 'isRead', 'readAt'
+            ]))
+          || (t == 'like'
+            && d.keys().hasOnly([
+              'recipientId', 'actorId', 'type',
+              'productId', 'productName',
+              'actorName', 'actorUsername', 'createdAt', 'isRead', 'readAt'
+            ])
+            && nonEmptyString(d.productId))
+          || (t == 'badge_earned'
+            && d.keys().hasOnly([
+              'recipientId', 'actorId', 'type',
+              'badgeId', 'badgeName',
+              'createdAt', 'isRead', 'readAt'
+            ])
+            && nonEmptyString(d.badgeId))
+          || (t == 'metric_event'
+            && d.keys().hasOnly([
+              'recipientId', 'actorId', 'type',
+              'metricName', 'folderName', 'productId', 'productName',
+              'createdAt', 'isRead', 'readAt'
+            ])
+            && nonEmptyString(d.metricName))
+        );
+    }
+
+    function notifReadUpdateValid(userId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      return request.auth.uid == userId
+        && before.diff(after).affectedKeys().hasOnly(['isRead', 'readAt'])
+        && (!('isRead' in after) || after.isRead is bool)
+        && (!('readAt' in after) || after.readAt == null || after.readAt is timestamp);
+    }
+
+    function validBadgeProgressDoc(d) {
+      return d.keys().hasOnly([
+            'badgeId', 'title', 'description', 'category', 'tier',
+            'target', 'current', 'earned', 'earnedAt', 'updatedAt',
+            'progressLabel', 'isComingSoon'
+          ])
+        && d.badgeId is string
+        && d.title is string
+        && d.description is string
+        && d.category is string
+        && d.tier is string
+        && d.target is int
+        && d.current is int
+        && d.earned is bool
+        && (!('earnedAt' in d) || d.earnedAt == null || d.earnedAt is timestamp)
+        && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp)
+        && optionalStringMax(d, 'progressLabel', 200)
+        && (!('isComingSoon' in d) || d.isComingSoon is bool);
+    }
+
+    function validMetricsSummaryDoc(d) {
+      return d.keys().hasOnly([
+            'searchCount', 'profileVisits', 'productVisits', 'folderViews',
+            'trendViews', 'shopNowClicks', 'likesGiven', 'followsCount',
+            'savedProductsCount', 'foldersCreatedCount',
+            'streakDays', 'maxStreakDays', 'lastActiveDate', 'updatedAt'
+          ])
+        && (!('searchCount' in d) || (d.searchCount is int && d.searchCount >= 0))
+        && (!('profileVisits' in d) || (d.profileVisits is int && d.profileVisits >= 0))
+        && (!('productVisits' in d) || (d.productVisits is int && d.productVisits >= 0))
+        && (!('folderViews' in d) || (d.folderViews is int && d.folderViews >= 0))
+        && (!('trendViews' in d) || (d.trendViews is int && d.trendViews >= 0))
+        && (!('shopNowClicks' in d) || (d.shopNowClicks is int && d.shopNowClicks >= 0))
+        && (!('likesGiven' in d) || (d.likesGiven is int && d.likesGiven >= 0))
+        && (!('followsCount' in d) || (d.followsCount is int && d.followsCount >= 0))
+        && (!('savedProductsCount' in d) || (d.savedProductsCount is int && d.savedProductsCount >= 0))
+        && (!('foldersCreatedCount' in d) || (d.foldersCreatedCount is int && d.foldersCreatedCount >= 0))
+        && (!('streakDays' in d) || (d.streakDays is int && d.streakDays >= 0))
+        && (!('maxStreakDays' in d) || (d.maxStreakDays is int && d.maxStreakDays >= 0))
+        && (!('lastActiveDate' in d) || d.lastActiveDate == null || d.lastActiveDate is string)
+        && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp);
+    }
+
+    function validFolderStatsDoc(d, ownerId) {
+      return d.keys().hasOnly(['ownerId', 'folderName', 'viewCount', 'updatedAt'])
+        && d.ownerId is string
+        && d.ownerId == ownerId
+        && d.folderName is string
+        && d.folderName.size() > 0
+        && d.folderName.size() <= 200
+        && d.viewCount is int
+        && d.viewCount >= 0
+        && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp);
+    }
+
+    function validProductStatsDoc(d, ownerId, productId) {
+      return d.keys().hasOnly([
+            'ownerId', 'productId', 'productName', 'shopNowClicks',
+            'productViews', 'updatedAt'
+          ])
+        && d.ownerId is string
+        && d.ownerId == ownerId
+        && d.productId is string
+        && d.productId == productId
+        && optionalStringMax(d, 'productName', 500)
+        && (!('shopNowClicks' in d) || (d.shopNowClicks is int && d.shopNowClicks >= 0))
+        && (!('productViews' in d) || (d.productViews is int && d.productViews >= 0))
+        && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp);
+    }
+
+    function validProductCreate(d) {
+      return d.keys().hasAll([
+            'name', 'description', 'price', 'imageUrl', 'url',
+            'userId', 'createdAt', 'likes', 'likedBy'
+          ])
+        && d.keys().hasOnly([
+            'name', 'description', 'price', 'priceDisplay', 'imageUrl', 'url',
+            'userId', 'category', 'createdAt', 'likes', 'likedBy'
+          ])
+        && d.name is string && d.name.size() <= 500
+        && d.description is string && d.description.size() <= 10000
+        && validPriceField(d.price)
+        && d.imageUrl is string && d.imageUrl.size() <= 2000
+        && d.url is string && d.url.size() <= 2000
+        && d.userId is string && d.userId == request.auth.uid
+        && d.createdAt is timestamp
+        && d.likes is int && d.likes >= 0 && d.likes <= 1000000
+        && d.likedBy is list && d.likedBy.size() <= 100000
+        && d.likes == d.likedBy.size()
+        && optionalStringMax(d, 'category', 200)
+        && optionalStringMax(d, 'priceDisplay', 200);
+    }
+
+    function productUpdateAllowed() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let ownerId = before.userId;
+      let uid = request.auth.uid;
+
+      return after.userId == ownerId
+        && (
+          (ownerId == uid)
+          || onlyLikeFieldsChanged(before, after)
+        );
+    }
+
+    function onlyLikeFieldsChanged(before, after) {
+      return before.diff(after).affectedKeys().hasOnly(['likedBy', 'likes'])
+        && after.likedBy is list
+        && after.likedBy.size() <= 100000
+        && after.likes is int
+        && after.likes >= 0
+        && after.likes <= 1000000
+        && after.likes == after.likedBy.size();
+    }
+
+    function trendAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
+    function trendSortOrderOk(n) {
+      return n is int && n >= 0 && n <= 10000000;
+    }
+
+    function validTrendBoardDoc(d) {
+      return d.keys().hasOnly(['title', 'sortOrder', 'updatedAt'])
+        && d.title is string && d.title.size() <= 200
+        && trendSortOrderOk(d.sortOrder)
+        && d.updatedAt is timestamp;
+    }
+
+    function validTrendMoodDoc(d) {
+      return d.keys().hasOnly(['imageUrl', 'sortOrder', 'createdAt'])
+        && d.imageUrl is string && d.imageUrl.size() <= 2000
+        && trendSortOrderOk(d.sortOrder)
+        && d.createdAt is timestamp;
+    }
+
+    function validTrendProductDoc(d) {
+      return d.keys().hasOnly(['title', 'priceDisplay', 'imageUrl', 'linkUrl', 'sortOrder', 'createdAt'])
+        && d.title is string && d.title.size() <= 300
+        && d.priceDisplay is string && d.priceDisplay.size() <= 120
+        && d.imageUrl is string && d.imageUrl.size() <= 2000
+        && d.linkUrl is string && d.linkUrl.size() <= 2000
+        && trendSortOrderOk(d.sortOrder)
+        && d.createdAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // usernames/{handle} — mapa handle → uid (get público para registo/disponibilidade)
+    // -------------------------------------------------------------------------
+    match /usernames/{uname} {
+      allow get: if true;
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid is string
+        && request.resource.data.uid == request.auth.uid;
+
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
+
+      allow update: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // users/{userId}
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+
+      allow get: if signedIn();
+
+      allow list: if signedIn();
+
+      allow create: if isSelf(userId)
+        && validUserDocument(request.resource.data, true);
+
+      // ⭐ ATUALIZADO: Permite updates de followingIds sem validação completa
+      allow update: if isSelf(userId)
+        && (
+          onlyEmptyFoldersChanged()
+          || onlyFollowingIdsChanged()
+          || (
+            (!resource.data.keys().hasAll(['createdAt'])
+                || request.resource.data.createdAt == resource.data.createdAt)
+            && validUserDocument(request.resource.data, false)
+          )
+        );
+
+      allow delete: if isSelf(userId);
+
+      match /notifications/{notifId} {
+
+        allow get, list: if isSelf(userId);
+
+        allow delete: if isSelf(userId);
+
+        allow update: if notifReadUpdateValid(userId);
+
+        allow create: if signedIn()
+          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.recipientId == userId
+          && notifPayloadValid();
+      }
+
+      match /badge_progress/{badgeId} {
+        allow get, list: if isSelf(userId);
+        allow create, update: if isSelf(userId)
+          && validBadgeProgressDoc(request.resource.data);
+        allow delete: if isSelf(userId);
+      }
+
+      match /metrics/{metricDoc} {
+        allow get, list: if isSelf(userId);
+        allow create, update: if isSelf(userId)
+          && validMetricsSummaryDoc(request.resource.data);
+        allow delete: if false;
+      }
+
+      match /folder_stats/{folderKey} {
+        allow get, list: if signedIn();
+        allow create, update: if signedIn()
+          && validFolderStatsDoc(request.resource.data, userId);
+        allow delete: if isSelf(userId);
+      }
+
+      match /product_stats/{productId} {
+        allow get, list: if signedIn();
+        allow create, update: if signedIn()
+          && validProductStatsDoc(request.resource.data, userId, productId);
+        allow delete: if isSelf(userId);
+      }
+
+      match /fcm_tokens/{tokenId} {
+        allow get, list: if isSelf(userId);
+        allow create, update: if isSelf(userId)
+          && request.resource.data.keys().hasOnly(['token', 'updatedAt', 'platform'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0
+          && optionalStringMax(request.resource.data, 'platform', 50)
+          && (!('updatedAt' in request.resource.data)
+            || request.resource.data.updatedAt == null
+            || request.resource.data.updatedAt is timestamp);
+        allow delete: if isSelf(userId);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // admins/{uid} — só leitura do próprio doc (app verifica isCurrentUserAdmin)
+    // Escrita apenas via Console / Admin SDK.
+    // -------------------------------------------------------------------------
+    match /admins/{adminId} {
+      allow get: if signedIn() && request.auth.uid == adminId;
+      allow list, create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // trend_boards — leitura: qualquer utilizador autenticado (aba Trends).
+    // Escrita: apenas trendAdmin().
+    // -------------------------------------------------------------------------
+    match /trend_boards/{boardId} {
+      allow read: if signedIn();
+      allow create: if trendAdmin() && validTrendBoardDoc(request.resource.data);
+      allow update: if trendAdmin() && validTrendBoardDoc(request.resource.data);
+      allow delete: if trendAdmin();
+
+      match /mood_images/{moodId} {
+        allow read: if signedIn();
+        allow create: if trendAdmin() && validTrendMoodDoc(request.resource.data);
+        allow update: if trendAdmin() && validTrendMoodDoc(request.resource.data);
+        allow delete: if trendAdmin();
+      }
+
+      match /trend_products/{productId} {
+        allow read: if signedIn();
+        allow create: if trendAdmin() && validTrendProductDoc(request.resource.data);
+        allow update: if trendAdmin() && validTrendProductDoc(request.resource.data);
+        allow delete: if trendAdmin();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // products/{productId}
+    // -------------------------------------------------------------------------
+    match /products/{productId} {
+
+      allow get: if signedIn();
+
+      allow list: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && validProductCreate(request.resource.data);
+
+      allow update: if signedIn()
+        && productUpdateAllowed();
+
+      allow delete: if signedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // Nenhuma outra coleção
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+```
+
+---
+
+## Opção 2: Deploy via Firebase CLI (Linha de Comando) 💻
+
+### Pré-requisitos:
+```bash
+npm install -g firebase-tools
+```
+
+### Passos:
+
+1. **Login no Firebase**
+   ```bash
+   firebase login
+   ```
+
+2. **Navegue até o diretório do projeto**
+   ```bash
+   cd /caminho/para/Gimie-atualiza-o
+   ```
+
+3. **Deploy das regras**
+   ```bash
+   firebase deploy --only firestore:rules
+   ```
+
+4. **Confirme o sucesso**
+   ```
+   ✔ Deploy complete!
+   ```
+
+---
+
+## ✅ Como Verificar se o Deploy Funcionou
+
+### No Firebase Console:
+1. Vá para **Firestore Database** > **Regras**
+2. Procure pela função `onlyFollowingIdsChanged()` (nova)
+3. Verifique se a linha `|| onlyFollowingIdsChanged()` está presente na regra de update
+
+### No App:
+1. Faça login
+2. Vá para "Seguir usuários"
+3. Tente seguir alguém
+4. Deve funcionar sem erros! ✅
+
+---
+
+## 🔍 O Que Foi Alterado
+
+### Linhas Adicionadas (aproximadamente):
+
+**Linha ~89-94**: Nova função `onlyFollowingIdsChanged()`
+```javascript
+function onlyFollowingIdsChanged() {
+  return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followingIds'])
+    && request.resource.data.followingIds is list
+    && request.resource.data.followingIds.size() <= 10000;
+}
+```
+
+**Linha ~335**: Adicionada na regra de update
+```javascript
+|| onlyFollowingIdsChanged()
+```
+
+---
+
+## 📞 Precisa de Ajuda?
+
+Se tiver problemas com o deploy:
+1. Verifique se tem permissões de admin no projeto Firebase
+2. Confirme que está no projeto correto: `firebase projects:list`
+3. Veja os logs de erro no Firebase Console
+
+---
+
+**Nota**: As alterações nas regras são **aplicadas instantaneamente** após o deploy/publicação!

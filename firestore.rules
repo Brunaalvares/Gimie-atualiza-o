@@ -86,6 +86,13 @@ service cloud.firestore {
                 && request.resource.data.emptyFolders.size() <= 500));
     }
 
+    /// Atualização só de followingIds (seguir/deixar de seguir) — não exige revalidar o doc inteiro.
+    function onlyFollowingIdsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followingIds'])
+        && request.resource.data.followingIds is list
+        && request.resource.data.followingIds.size() <= 10000;
+    }
+
     function notifPayloadValid() {
       let d = request.resource.data;
       let t = d.type;
@@ -325,6 +332,7 @@ service cloud.firestore {
       allow update: if isSelf(userId)
         && (
           onlyEmptyFoldersChanged()
+          || onlyFollowingIdsChanged()
           || (
             (!resource.data.keys().hasAll(['createdAt'])
                 || request.resource.data.createdAt == resource.data.createdAt)

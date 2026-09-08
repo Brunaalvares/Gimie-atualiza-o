@@ -371,7 +371,7 @@ class _FolderProductsScreenState extends State<FolderProductsScreen> {
             tooltip: 'Compartilhar pasta',
             onPressed: _shareFolder,
             icon: const Icon(
-              Icons.ios_share,
+              Icons.share_outlined,
               color: Color(0xFF8B7FB8),
             ),
           ),

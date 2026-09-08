@@ -1201,6 +1201,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     listen: false,
                                   ).resolvedUserId;
                                   if (userId == null || userId.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Faça login para compartilhar a pasta',
+                                        ),
+                                        backgroundColor: Colors.orange,
+                                      ),
+                                    );
                                     return;
                                   }
                                   SharedFolderLinkService.instance
@@ -1211,7 +1219,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   );
                                 },
                                 icon: const Icon(
-                                  Icons.ios_share,
+                                  Icons.share_outlined,
                                   size: 20,
                                   color: Color(0xFF8B7FB8),
                                 ),

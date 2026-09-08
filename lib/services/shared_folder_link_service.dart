@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/clipboard_web.dart';
 import '../utils/web_location.dart';
 
 class SharedFolderParams {
@@ -79,14 +81,107 @@ class SharedFolderLinkService {
     await prefs.remove(_pendingFolderKey);
   }
 
+  Future<bool> _tryCopy(String link) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: link));
+    } catch (_) {
+      // continue to web fallback
+    }
+    if (kIsWeb) {
+      return copyTextToClipboardWeb(link);
+    }
+    return true;
+  }
+
   Future<void> copyFolderLink({
     required BuildContext context,
     required String userId,
     required String folderName,
   }) async {
-    final link = buildLink(userId: userId, folderName: folderName);
-    await Clipboard.setData(ClipboardData(text: link));
+    final trimmedUser = userId.trim();
+    final trimmedFolder = folderName.trim();
+    if (trimmedUser.isEmpty || trimmedFolder.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível gerar o link desta pasta'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final link = buildLink(userId: trimmedUser, folderName: trimmedFolder);
+    final copied = await _tryCopy(link);
     if (!context.mounted) return;
+
+    // No web o clipboard pode falhar silenciosamente: sempre mostra o link.
+    if (kIsWeb || !copied) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text(
+              'Link da pasta',
+              style: TextStyle(
+                fontFamily: 'Raleway',
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF6B2C5C),
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  copied
+                      ? 'Link copiado! Você também pode copiar abaixo:'
+                      : 'Copie o link abaixo para compartilhar:',
+                  style: const TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 14,
+                    color: Color(0xFF757575),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SelectableText(
+                  link,
+                  style: const TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 13,
+                    color: Color(0xFF8B7FB8),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  final ok = await _tryCopy(link);
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        ok ? 'Link copiado! ✓' : 'Selecione e copie o link',
+                      ),
+                      backgroundColor: ok ? Colors.green : Colors.orange,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                child: const Text('Copiar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Fechar'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Link copiado! ✓'),

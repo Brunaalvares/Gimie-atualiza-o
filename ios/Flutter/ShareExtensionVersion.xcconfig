@@ -1,2 +1,6 @@
 // Versão alinhada ao pubspec (via Generated.xcconfig). Usado pelo target da Share Extension.
-#include "Generated.xcconfig"
+// Em Xcode Cloud, Generated.xcconfig é criado por ios/ci_scripts/ci_post_clone.sh.
+// Fallbacks primeiro; Generated.xcconfig sobrescreve quando existir.
+FLUTTER_BUILD_NAME=1.0.4
+FLUTTER_BUILD_NUMBER=7
+#include? "Generated.xcconfig"

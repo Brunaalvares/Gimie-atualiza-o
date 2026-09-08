@@ -29,10 +29,13 @@ class BadgesProvider extends ChangeNotifier {
     _subscription = _service.watchBadges(userId).listen(
       (items) {
         _badges = items;
+        _errorMessage = null;
         _isLoading = false;
         notifyListeners();
       },
       onError: (error) {
+        // Mantém o catálogo local se a sync remota falhar (ex.: regras atrasadas).
+        _badges = BadgesService.catalogFallback();
         _errorMessage = error.toString();
         _isLoading = false;
         notifyListeners();

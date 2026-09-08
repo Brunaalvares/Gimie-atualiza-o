@@ -7,6 +7,7 @@ import '../models/product_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/product_provider.dart';
 import '../services/metrics_service.dart';
+import '../services/shared_folder_link_service.dart';
 import 'add_product_screen.dart';
 
 class FolderProductsScreen extends StatefulWidget {
@@ -333,6 +334,24 @@ class _FolderProductsScreenState extends State<FolderProductsScreen> {
     });
   }
 
+  Future<void> _shareFolder() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUserId = authProvider.resolvedUserId;
+    final ownerId = currentUserId ??
+        (_visibleProducts.isNotEmpty ? _visibleProducts.first.userId : null);
+    if (ownerId == null || ownerId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível gerar o link')),
+      );
+      return;
+    }
+    await SharedFolderLinkService.instance.copyFolderLink(
+      context: context,
+      userId: ownerId,
+      folderName: widget.categoryName,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -347,6 +366,16 @@ class _FolderProductsScreenState extends State<FolderProductsScreen> {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Compartilhar pasta',
+            onPressed: _shareFolder,
+            icon: const Icon(
+              Icons.ios_share,
+              color: Color(0xFF8B7FB8),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: widget.allowDelete
           ? FloatingActionButton.extended(

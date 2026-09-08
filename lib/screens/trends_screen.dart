@@ -15,10 +15,10 @@ class TrendsScreen extends StatefulWidget {
   const TrendsScreen({super.key});
 
   @override
-  State<TrendsScreen> createState() => _TrendsScreenState();
+  State<TrendsScreen> createState() => TrendsScreenState();
 }
 
-class _TrendsScreenState extends State<TrendsScreen> {
+class TrendsScreenState extends State<TrendsScreen> {
   final FirebaseService _firebaseService = FirebaseService();
   Future<_TrendsPageData>? _future;
 
@@ -29,38 +29,31 @@ class _TrendsScreenState extends State<TrendsScreen> {
   }
 
   Future<_TrendsPageData> _loadPageData() async {
-    final results = await Future.wait<dynamic>([
-      TrendsService.instance.fetchAllTrendsContent(),
-      _firebaseService.getProducts(limit: 100),
-    ]);
-    final boards = results[0] as List<TrendBoardContent>;
+    final boardsFuture = TrendsService.instance.fetchAllTrendsContent();
     final currentUserId = _firebaseService.currentUser?.uid;
-    final products = (results[1] as List<Product>)
-        .where(
-          (product) =>
-              product.userId.isNotEmpty &&
-              product.userId != currentUserId &&
-              product.imageUrl.trim().isNotEmpty,
-        )
-        .toList()
-      ..sort((a, b) {
-        final byLikes = b.likes.compareTo(a.likes);
-        if (byLikes != 0) return byLikes;
-        return b.createdAt.compareTo(a.createdAt);
-      });
+    final productsFuture = _firebaseService.getPopularCommunityProducts(
+      limit: 12,
+      excludeUserId: currentUserId,
+    );
+
+    final boards = await boardsFuture;
+    final popularProducts = await productsFuture;
 
     return _TrendsPageData(
       boards: boards,
-      popularProducts: products.take(12).toList(),
+      popularProducts: popularProducts,
     );
   }
 
-  Future<void> _reload() async {
+  Future<void> reload() async {
+    if (!mounted) return;
     setState(() {
       _future = _loadPageData();
     });
     await _future;
   }
+
+  Future<void> _reload() => reload();
 
   Future<void> _openUrl(String raw) async {
     final t = raw.trim();
@@ -230,7 +223,7 @@ class _PopularProductsSection extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Produtos salvos por outros usuários, ordenados pelos mais curtidos.',
+              'Produtos mais salvos, ordenados pelos mais curtidos.',
               style: TextStyle(
                 fontFamily: 'Roboto',
                 fontSize: 13,

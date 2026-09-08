@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/user_model.dart';
@@ -17,6 +19,7 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
   final Set<String> _processingUserIds = <String>{};
   List<UserModel> _users = const [];
   bool _isLoading = true;
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -26,8 +29,18 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String _) {
+    setState(() {});
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      _loadUsers();
+    });
   }
 
   Future<void> _loadUsers() async {
@@ -61,8 +74,11 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
 
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Não foi possível atualizar esse usuário'),
+        SnackBar(
+          content: Text(
+            authProvider.errorMessage ??
+                'Não foi possível atualizar esse usuário',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -108,7 +124,7 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
                           )
                         : null,
                   ),
-                  onChanged: (_) => setState(() {}),
+                  onChanged: _onSearchChanged,
                   onSubmitted: (_) => _loadUsers(),
                 ),
               ),
@@ -165,11 +181,14 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
                         : ListView.separated(
                             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                             itemCount: _users.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 12),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final user = _users[index];
-                              final isFollowing = followingIds.contains(user.id);
-                              final isProcessing = _processingUserIds.contains(user.id);
+                              final isFollowing =
+                                  followingIds.contains(user.id);
+                              final isProcessing =
+                                  _processingUserIds.contains(user.id);
 
                               final card = Material(
                                 color: Colors.white,
@@ -179,7 +198,8 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
                                   onTap: () async {
                                     await Navigator.of(context).push(
                                       MaterialPageRoute(
-                                        builder: (_) => UserProfileScreen(user: user),
+                                        builder: (_) =>
+                                            UserProfileScreen(user: user),
                                       ),
                                     );
                                     if (!mounted) return;
@@ -191,7 +211,8 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
                                       borderRadius: BorderRadius.circular(14),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.06),
+                                          color: Colors.black
+                                              .withValues(alpha: 0.06),
                                           blurRadius: 10,
                                           offset: const Offset(0, 3),
                                         ),
@@ -211,7 +232,8 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 user.name,
@@ -237,7 +259,9 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
                                         ),
                                         const SizedBox(width: 10),
                                         ElevatedButton(
-                                          onPressed: isProcessing ? null : () => _toggleFollow(user),
+                                          onPressed: isProcessing
+                                              ? null
+                                              : () => _toggleFollow(user),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: isFollowing
                                                 ? Colors.grey.shade200
@@ -255,9 +279,16 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
                                               ? const SizedBox(
                                                   height: 14,
                                                   width: 14,
-                                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                  ),
                                                 )
-                                              : Text(isFollowing ? 'Seguindo' : 'Seguir'),
+                                              : Text(
+                                                  isFollowing
+                                                      ? 'Seguindo'
+                                                      : 'Seguir',
+                                                ),
                                         ),
                                       ],
                                     ),
@@ -274,12 +305,17 @@ class _FollowUsersScreenState extends State<FollowUsersScreen> {
                                 direction: DismissDirection.endToStart,
                                 background: Container(
                                   alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.red.shade400,
                                     borderRadius: BorderRadius.circular(14),
                                   ),
-                                  child: const Icon(Icons.person_remove, color: Colors.white),
+                                  child: const Icon(
+                                    Icons.person_remove,
+                                    color: Colors.white,
+                                  ),
                                 ),
                                 confirmDismiss: (_) async {
                                   if (isProcessing) return false;

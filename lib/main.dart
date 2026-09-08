@@ -7,6 +7,7 @@ import 'providers/product_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/scraping_provider.dart';
 import 'providers/badges_provider.dart';
+import 'providers/shared_folder_provider.dart';
 import 'services/share_service.dart';
 import 'services/share_flow_coordinator.dart';
 import 'navigation/app_navigator.dart';
@@ -49,6 +50,7 @@ class GimieApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ProductProvider()),
         ChangeNotifierProvider(create: (_) => ScrapingProvider()),
         ChangeNotifierProvider(create: (_) => BadgesProvider()),
+        ChangeNotifierProvider(create: (_) => SharedFolderProvider()),
       ],
       child: MaterialApp(
         title: 'Gimie',

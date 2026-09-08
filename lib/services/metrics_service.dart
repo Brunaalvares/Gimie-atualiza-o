@@ -107,6 +107,25 @@ class MetricsService {
     await BadgesService.instance.evaluateAndSync(userId);
   }
 
+  /// Mensura curtida (ou remoção) num card de produto do dono.
+  /// Atualiza `users/{ownerId}/product_stats/{productId}.likesReceived`.
+  Future<void> trackProductCardLike({
+    required String ownerId,
+    required String viewerId,
+    required String productId,
+    String? productName,
+    bool liked = true,
+  }) async {
+    await _firebase.recordProductCardLike(
+      ownerId: ownerId,
+      viewerId: viewerId,
+      productId: productId,
+      productName: productName,
+      liked: liked,
+    );
+    await BadgesService.instance.evaluateAndSync(ownerId);
+  }
+
   Future<void> touchDailyStreak({required String userId}) async {
     await _firebase.touchDailyStreak(userId);
     await BadgesService.instance.evaluateAndSync(userId);

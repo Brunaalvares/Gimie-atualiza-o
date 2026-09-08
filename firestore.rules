@@ -86,6 +86,13 @@ service cloud.firestore {
                 && request.resource.data.emptyFolders.size() <= 500));
     }
 
+    /// Seguir / deixar de seguir — só mexe em followingIds.
+    function onlyFollowingIdsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followingIds'])
+        && request.resource.data.followingIds is list
+        && request.resource.data.followingIds.size() <= 10000;
+    }
+
     function notifPayloadValid() {
       let d = request.resource.data;
       let t = d.type;
@@ -153,8 +160,10 @@ service cloud.firestore {
         && d.description is string
         && d.category is string
         && d.tier is string
-        && d.target is int
-        && d.current is int
+        && (d.target is int || d.target is float)
+        && d.target >= 0
+        && (d.current is int || d.current is float)
+        && d.current >= 0
         && d.earned is bool
         && (!('earnedAt' in d) || d.earnedAt == null || d.earnedAt is timestamp)
         && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp)
@@ -169,18 +178,32 @@ service cloud.firestore {
             'savedProductsCount', 'foldersCreatedCount',
             'streakDays', 'maxStreakDays', 'lastActiveDate', 'updatedAt'
           ])
-        && (!('searchCount' in d) || (d.searchCount is int && d.searchCount >= 0))
-        && (!('profileVisits' in d) || (d.profileVisits is int && d.profileVisits >= 0))
-        && (!('productVisits' in d) || (d.productVisits is int && d.productVisits >= 0))
-        && (!('folderViews' in d) || (d.folderViews is int && d.folderViews >= 0))
-        && (!('trendViews' in d) || (d.trendViews is int && d.trendViews >= 0))
-        && (!('shopNowClicks' in d) || (d.shopNowClicks is int && d.shopNowClicks >= 0))
-        && (!('likesGiven' in d) || (d.likesGiven is int && d.likesGiven >= 0))
-        && (!('followsCount' in d) || (d.followsCount is int && d.followsCount >= 0))
-        && (!('savedProductsCount' in d) || (d.savedProductsCount is int && d.savedProductsCount >= 0))
-        && (!('foldersCreatedCount' in d) || (d.foldersCreatedCount is int && d.foldersCreatedCount >= 0))
-        && (!('streakDays' in d) || (d.streakDays is int && d.streakDays >= 0))
-        && (!('maxStreakDays' in d) || (d.maxStreakDays is int && d.maxStreakDays >= 0))
+        && (!('searchCount' in d)
+          || ((d.searchCount is int || d.searchCount is float) && d.searchCount >= 0))
+        && (!('profileVisits' in d)
+          || ((d.profileVisits is int || d.profileVisits is float) && d.profileVisits >= 0))
+        && (!('productVisits' in d)
+          || ((d.productVisits is int || d.productVisits is float) && d.productVisits >= 0))
+        && (!('folderViews' in d)
+          || ((d.folderViews is int || d.folderViews is float) && d.folderViews >= 0))
+        && (!('trendViews' in d)
+          || ((d.trendViews is int || d.trendViews is float) && d.trendViews >= 0))
+        && (!('shopNowClicks' in d)
+          || ((d.shopNowClicks is int || d.shopNowClicks is float) && d.shopNowClicks >= 0))
+        && (!('likesGiven' in d)
+          || ((d.likesGiven is int || d.likesGiven is float) && d.likesGiven >= 0))
+        && (!('followsCount' in d)
+          || ((d.followsCount is int || d.followsCount is float) && d.followsCount >= 0))
+        && (!('savedProductsCount' in d)
+          || ((d.savedProductsCount is int || d.savedProductsCount is float)
+            && d.savedProductsCount >= 0))
+        && (!('foldersCreatedCount' in d)
+          || ((d.foldersCreatedCount is int || d.foldersCreatedCount is float)
+            && d.foldersCreatedCount >= 0))
+        && (!('streakDays' in d)
+          || ((d.streakDays is int || d.streakDays is float) && d.streakDays >= 0))
+        && (!('maxStreakDays' in d)
+          || ((d.maxStreakDays is int || d.maxStreakDays is float) && d.maxStreakDays >= 0))
         && (!('lastActiveDate' in d) || d.lastActiveDate == null || d.lastActiveDate is string)
         && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp);
     }
@@ -192,7 +215,7 @@ service cloud.firestore {
         && d.folderName is string
         && d.folderName.size() > 0
         && d.folderName.size() <= 200
-        && d.viewCount is int
+        && (d.viewCount is int || d.viewCount is float)
         && d.viewCount >= 0
         && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp);
     }
@@ -200,15 +223,19 @@ service cloud.firestore {
     function validProductStatsDoc(d, ownerId, productId) {
       return d.keys().hasOnly([
             'ownerId', 'productId', 'productName', 'shopNowClicks',
-            'productViews', 'updatedAt'
+            'productViews', 'likesReceived', 'updatedAt'
           ])
         && d.ownerId is string
         && d.ownerId == ownerId
         && d.productId is string
         && d.productId == productId
         && optionalStringMax(d, 'productName', 500)
-        && (!('shopNowClicks' in d) || (d.shopNowClicks is int && d.shopNowClicks >= 0))
-        && (!('productViews' in d) || (d.productViews is int && d.productViews >= 0))
+        && (!('shopNowClicks' in d)
+          || ((d.shopNowClicks is int || d.shopNowClicks is float) && d.shopNowClicks >= 0))
+        && (!('productViews' in d)
+          || ((d.productViews is int || d.productViews is float) && d.productViews >= 0))
+        && (!('likesReceived' in d)
+          || ((d.likesReceived is int || d.likesReceived is float) && d.likesReceived >= 0))
         && (!('updatedAt' in d) || d.updatedAt == null || d.updatedAt is timestamp);
     }
 
@@ -315,7 +342,8 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /users/{userId} {
 
-      allow get: if signedIn();
+      // Public get: shared folder pages (web guests) need owner name/photo/@.
+      allow get: if true;
 
       allow list: if signedIn();
 
@@ -325,6 +353,7 @@ service cloud.firestore {
       allow update: if isSelf(userId)
         && (
           onlyEmptyFoldersChanged()
+          || onlyFollowingIdsChanged()
           || (
             (!resource.data.keys().hasAll(['createdAt'])
                 || request.resource.data.createdAt == resource.data.createdAt)
@@ -429,9 +458,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /products/{productId} {
 
-      allow get: if signedIn();
+      // Public read: shared folder links load products without login.
+      allow get: if true;
 
-      allow list: if signedIn();
+      allow list: if true;
 
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid

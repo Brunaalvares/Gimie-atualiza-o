@@ -25,14 +25,16 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   static const String _lastTabPrefsKey = 'main_shell_last_tab_index';
 
+  final GlobalKey<TrendsScreenState> _trendsKey = GlobalKey<TrendsScreenState>();
+
   int _currentIndex = 0;
   bool _checkedPendingShare = false;
 
-  final List<Widget> _screens = [
+  late final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
     const SizedBox(), // Placeholder for FAB
-    const TrendsScreen(),
+    TrendsScreen(key: _trendsKey),
     const ProfileScreen(),
   ];
 
@@ -118,6 +120,8 @@ class _MainShellState extends State<MainShell> {
         _currentIndex = 3;
       });
       unawaited(_persistCurrentTab());
+      // Refresh popular products when opening Trends (IndexedStack keeps stale data).
+      unawaited(_trendsKey.currentState?.reload() ?? Future<void>.value());
     } else {
       if (index == 4) {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);

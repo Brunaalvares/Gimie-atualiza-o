@@ -15,9 +15,10 @@ class TrendBoard {
 
   factory TrendBoard.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
+    final title = d['title']?.toString().trim();
     return TrendBoard(
       id: doc.id,
-      title: (d['title'] as String?)?.trim() ?? 'Trend',
+      title: (title == null || title.isEmpty) ? 'Trend' : title,
       sortOrder: (d['sortOrder'] as num?)?.toInt() ?? 0,
       updatedAt: (d['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -45,7 +46,7 @@ class TrendMoodImage {
     final d = doc.data() ?? {};
     return TrendMoodImage(
       id: doc.id,
-      imageUrl: (d['imageUrl'] as String?)?.trim() ?? '',
+      imageUrl: d['imageUrl']?.toString().trim() ?? '',
       sortOrder: (d['sortOrder'] as num?)?.toInt() ?? 0,
     );
   }
@@ -76,12 +77,13 @@ class TrendManualProduct {
 
   factory TrendManualProduct.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
+    final priceRaw = d['priceDisplay']?.toString().trim();
     return TrendManualProduct(
       id: doc.id,
-      title: (d['title'] as String?)?.trim() ?? '',
-      priceDisplay: (d['priceDisplay'] as String?)?.trim(),
-      imageUrl: (d['imageUrl'] as String?)?.trim() ?? '',
-      linkUrl: (d['linkUrl'] as String?)?.trim() ?? '',
+      title: d['title']?.toString().trim() ?? '',
+      priceDisplay: (priceRaw == null || priceRaw.isEmpty) ? null : priceRaw,
+      imageUrl: d['imageUrl']?.toString().trim() ?? '',
+      linkUrl: d['linkUrl']?.toString().trim() ?? '',
       sortOrder: (d['sortOrder'] as num?)?.toInt() ?? 0,
     );
   }

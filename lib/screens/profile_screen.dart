@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../providers/product_provider.dart';
 import '../services/firebase_service.dart';
 import '../utils/profile_folder_layout.dart';
+import '../services/shared_folder_link_service.dart';
 import 'follow_users_screen.dart';
 import 'follow_list_screen.dart';
 import 'folder_products_screen.dart';
@@ -1014,7 +1015,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _loadFollowStats();
                       },
                       icon: const Icon(Icons.group_add_outlined),
-                      label: const Text('Gerenciar seguidores'),
+                      label: const Text('Seguir usuários'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF6B2C5C),
                         side: const BorderSide(color: Color(0xFF6B2C5C)),
@@ -1090,124 +1091,161 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       return Material(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () {
-                            final provider = Provider.of<ProductProvider>(
-                              context,
-                              listen: false,
-                            );
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => FolderProductsScreen(
-                                  categoryName: category,
-                                  products: categoryProducts,
-                                  allowDelete: true,
-                                  onDeleteProduct: (product) async {
-                                    return provider.deleteProduct(product.id);
-                                  },
-                                ),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.08),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.08),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                ClipRRect(
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: InkWell(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    width: 46,
-                                    height: 46,
-                                    color: const Color(0xFF8B7FB8)
-                                        .withValues(alpha: 0.15),
-                                    child: coverImage.isEmpty
-                                        ? const Icon(
-                                            Icons.folder_outlined,
-                                            color: Color(0xFF6B2C5C),
-                                          )
-                                        : Image.network(
-                                            coverImage,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) {
-                                              return const Icon(
-                                                Icons.folder_outlined,
-                                                color: Color(0xFF6B2C5C),
-                                              );
-                                            },
-                                          ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        category,
-                                        style: const TextStyle(
-                                          fontFamily: 'Raleway',
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 16,
+                                  onTap: () {
+                                    final provider =
+                                        Provider.of<ProductProvider>(
+                                      context,
+                                      listen: false,
+                                    );
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => FolderProductsScreen(
+                                          categoryName: category,
+                                          products: categoryProducts,
+                                          allowDelete: true,
+                                          onDeleteProduct: (product) async {
+                                            return provider
+                                                .deleteProduct(product.id);
+                                          },
                                         ),
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        categoryProducts.isEmpty
-                                            ? 'Pasta vazia — adicione produtos quando quiser'
-                                            : '${categoryProducts.length} produtos salvos',
-                                        style: const TextStyle(
-                                          fontFamily: 'Roboto',
-                                          color: Colors.grey,
-                                          fontSize: 13,
+                                    );
+                                  },
+                                  child: Row(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          width: 46,
+                                          height: 46,
+                                          color: const Color(0xFF8B7FB8)
+                                              .withValues(alpha: 0.15),
+                                          child: coverImage.isEmpty
+                                              ? const Icon(
+                                                  Icons.folder_outlined,
+                                                  color: Color(0xFF6B2C5C),
+                                                )
+                                              : Image.network(
+                                                  coverImage,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context,
+                                                      error, stackTrace) {
+                                                    return const Icon(
+                                                      Icons.folder_outlined,
+                                                      color: Color(0xFF6B2C5C),
+                                                    );
+                                                  },
+                                                ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              category,
+                                              style: const TextStyle(
+                                                fontFamily: 'Raleway',
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              categoryProducts.isEmpty
+                                                  ? 'Pasta vazia — adicione produtos quando quiser'
+                                                  : '${categoryProducts.length} produtos salvos',
+                                              style: const TextStyle(
+                                                fontFamily: 'Roboto',
+                                                color: Colors.grey,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                PopupMenuButton<String>(
-                                  onSelected: (value) {
-                                    if (value == 'rename') {
-                                      _renameFolder(
-                                        currentName: category,
-                                        categoryProducts: categoryProducts,
-                                        occupiedNamesLower:
-                                            occupiedFolderNamesLower,
-                                      );
-                                    } else if (value == 'delete') {
-                                      _deleteFolder(
-                                        categoryName: category,
-                                        categoryProducts: categoryProducts,
-                                      );
-                                    }
-                                  },
-                                  itemBuilder: (context) => const [
-                                    PopupMenuItem<String>(
-                                      value: 'rename',
-                                      child: Text('Renomear pasta'),
-                                    ),
-                                    PopupMenuItem<String>(
-                                      value: 'delete',
-                                      child: Text('Apagar pasta'),
-                                    ),
-                                  ],
-                                  icon: const Icon(Icons.more_vert),
+                              ),
+                              IconButton(
+                                tooltip: 'Compartilhar pasta',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: 36,
+                                  minHeight: 36,
                                 ),
-                                const Icon(Icons.chevron_right),
-                              ],
-                            ),
+                                onPressed: () {
+                                  final userId =
+                                      Provider.of<AuthProvider>(
+                                    context,
+                                    listen: false,
+                                  ).resolvedUserId;
+                                  if (userId == null || userId.isEmpty) {
+                                    return;
+                                  }
+                                  SharedFolderLinkService.instance
+                                      .copyFolderLink(
+                                    context: context,
+                                    userId: userId,
+                                    folderName: category,
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.ios_share,
+                                  size: 20,
+                                  color: Color(0xFF8B7FB8),
+                                ),
+                              ),
+                              PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'rename') {
+                                    _renameFolder(
+                                      currentName: category,
+                                      categoryProducts: categoryProducts,
+                                      occupiedNamesLower:
+                                          occupiedFolderNamesLower,
+                                    );
+                                  } else if (value == 'delete') {
+                                    _deleteFolder(
+                                      categoryName: category,
+                                      categoryProducts: categoryProducts,
+                                    );
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem<String>(
+                                    value: 'rename',
+                                    child: Text('Renomear pasta'),
+                                  ),
+                                  PopupMenuItem<String>(
+                                    value: 'delete',
+                                    child: Text('Apagar pasta'),
+                                  ),
+                                ],
+                                icon: const Icon(Icons.more_vert),
+                              ),
+                              const Icon(Icons.chevron_right),
+                            ],
                           ),
                         ),
                       );

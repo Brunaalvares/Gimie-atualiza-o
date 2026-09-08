@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/shared_folder_link_service.dart';
 import 'main_shell.dart';
 import 'login_screen.dart';
+import 'shared_folder_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -26,6 +28,18 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initializeEntryFlow() async {
+    final sharedParams =
+        SharedFolderLinkService.instance.parseFromCurrentUrl();
+    if (sharedParams != null && sharedParams.isValid) {
+      await SharedFolderLinkService.instance.savePending(sharedParams);
+      if (!mounted) return;
+      setState(() {
+        _checkingFirstAccess = false;
+      });
+      await _openSharedFolder(sharedParams);
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final seenOnboarding = prefs.getBool(_onboardingSeenKey) ?? false;
 
@@ -43,6 +57,20 @@ class _SplashScreenState extends State<SplashScreen> {
       _checkingFirstAccess = false;
       _showOnboarding = true;
     });
+  }
+
+  Future<void> _openSharedFolder(SharedFolderParams params) async {
+    if (_isNavigating || !mounted) return;
+    _isNavigating = true;
+
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => SharedFolderScreen(
+          userId: params.userId,
+          folderName: params.folderName,
+        ),
+      ),
+    );
   }
 
   Future<void> _goToNextScreen() async {

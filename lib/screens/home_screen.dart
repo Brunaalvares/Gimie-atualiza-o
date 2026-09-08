@@ -7,6 +7,7 @@ import '../providers/product_provider.dart';
 import '../models/product_model.dart';
 import '../services/metrics_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'follow_users_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -100,17 +101,42 @@ class _HomeScreenState extends State<HomeScreen> {
           final feedError = productProvider.errorMessage;
 
           if (user.followingIds.isEmpty) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 28),
-                child: Text(
-                  'Aqui aparecem os produtos que quem você segue salvou nas pastas.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Roboto',
-                    fontSize: 16,
-                    color: Colors.grey,
-                  ),
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'Aqui aparecem os produtos que quem você segue salvou nas pastas.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Roboto',
+                        fontSize: 16,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const FollowUsersScreen(),
+                          ),
+                        );
+                        if (!context.mounted) return;
+                        _loadedFeedForUserId = null;
+                        _loadedFollowingKey = '';
+                        _loadFollowingFeedIfNeeded();
+                      },
+                      icon: const Icon(Icons.person_add_alt_1_outlined),
+                      label: const Text('Seguir usuários'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B7FB8),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );

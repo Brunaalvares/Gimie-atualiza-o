@@ -140,6 +140,19 @@ class FirebaseService {
     }
   }
 
+  /// Read-only profile fetch for public shared folders (no backfill writes).
+  Future<UserModel?> getUserDocumentReadOnly(String userId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      if (!doc.exists || doc.data() == null) return null;
+      final data = Map<String, dynamic>.from(doc.data()!);
+      _applyFollowingLayoutPatchToData(data, _followingLayoutPatches(data));
+      return UserModel.fromFirestore(data, doc.id);
+    } catch (e) {
+      throw Exception('Get user document (read-only) error: $e');
+    }
+  }
+
   Future<UserModel?> getUserDocument(String userId) async {
     try {
       final doc = await _firestore.collection('users').doc(userId).get();
@@ -333,11 +346,28 @@ class FirebaseService {
   Future<List<UserModel>> searchUsers({
     String query = '',
     String? excludeUserId,
-    int limit = 40,
+    int limit = 80,
   }) async {
     try {
+      final normalizedQuery = query
+          .trim()
+          .replaceAll('@', '')
+          .toLowerCase();
+
+      // Exact @username via reservation collection (works beyond the sample page).
+      if (normalizedQuery.isNotEmpty) {
+        final ownerUid = await getUsernameOwnerUid(normalizedQuery);
+        if (ownerUid != null &&
+            ownerUid.isNotEmpty &&
+            ownerUid != excludeUserId) {
+          final exact = await getUserDocumentReadOnly(ownerUid);
+          if (exact != null) {
+            return [exact];
+          }
+        }
+      }
+
       final snapshot = await _firestore.collection('users').limit(limit).get();
-      final normalizedQuery = query.trim().toLowerCase();
 
       final users = snapshot.docs
           .map((doc) => UserModel.fromFirestore(doc.data(), doc.id))
@@ -511,7 +541,15 @@ class FirebaseService {
         'isRead': false,
         'readAt': null,
       });
-      await batch.commit();
+      try {
+        await batch.commit();
+      } catch (batchError) {
+        // Still follow even if notification write is blocked.
+        debugPrint('Follow batch (with notif) failed, falling back: $batchError');
+        await _firestore.collection('users').doc(currentUserId).update({
+          'followingIds': FieldValue.arrayUnion([targetUserId]),
+        });
+      }
     } catch (e) {
       throw Exception('Follow user error: $e');
     }
@@ -587,6 +625,54 @@ class FirebaseService {
     } catch (e) {
       throw Exception('Get products error: $e');
     }
+  }
+
+  /// Produtos salvos da comunidade para Trends (mais curtidos / mais recentes).
+  Future<List<Product>> getPopularCommunityProducts({
+    int limit = 12,
+    String? excludeUserId,
+  }) async {
+    List<Product> raw = const [];
+    try {
+      raw = await getProducts(limit: 300);
+    } catch (e) {
+      debugPrint('Popular products ordered query failed: $e');
+      try {
+        final snapshot =
+            await _firestore.collection('products').limit(300).get();
+        raw = snapshot.docs
+            .map((doc) => Product.fromFirestore(doc.data(), doc.id))
+            .toList();
+      } catch (fallbackError) {
+        debugPrint('Popular products fallback failed: $fallbackError');
+        return const [];
+      }
+    }
+
+    var filtered = raw
+        .where(
+          (product) =>
+              product.userId.isNotEmpty && product.imageUrl.trim().isNotEmpty,
+        )
+        .toList();
+
+    if (excludeUserId != null && excludeUserId.isNotEmpty) {
+      final withoutSelf = filtered
+          .where((product) => product.userId != excludeUserId)
+          .toList();
+      // Keep own products only when the community list would otherwise be empty.
+      if (withoutSelf.isNotEmpty) {
+        filtered = withoutSelf;
+      }
+    }
+
+    filtered.sort((a, b) {
+      final byLikes = b.likes.compareTo(a.likes);
+      if (byLikes != 0) return byLikes;
+      return b.createdAt.compareTo(a.createdAt);
+    });
+
+    return filtered.take(limit).toList();
   }
 
   /// Top utilizadores que mais salvaram produtos nos últimos 7 dias.
@@ -1163,12 +1249,14 @@ class FirebaseService {
     required String productId,
     required String field,
     String? productName,
+    int amount = 1,
   }) async {
+    if (amount == 0) return;
     try {
       final data = <String, dynamic>{
         'ownerId': ownerId,
         'productId': productId,
-        field: FieldValue.increment(1),
+        field: FieldValue.increment(amount),
         'updatedAt': FieldValue.serverTimestamp(),
       };
       final name = productName?.trim();
@@ -1234,6 +1322,50 @@ class FirebaseService {
       productId: productId,
       productName: productName,
     );
+  }
+
+  /// Curtida em card de produto: agrega `likesReceived` em `product_stats`
+  /// do dono. Ignora auto-curtida. Em unlike, decrementa (mínimo 0 nas regras).
+  Future<void> recordProductCardLike({
+    required String ownerId,
+    required String viewerId,
+    required String productId,
+    String? productName,
+    bool liked = true,
+  }) async {
+    if (ownerId.isEmpty ||
+        viewerId.isEmpty ||
+        productId.isEmpty ||
+        ownerId == viewerId) {
+      return;
+    }
+    await _incrementProductStat(
+      ownerId: ownerId,
+      productId: productId,
+      field: 'likesReceived',
+      productName: productName,
+      amount: liked ? 1 : -1,
+    );
+  }
+
+  /// Top cards por curtidas recebidas (`product_stats.likesReceived`).
+  Future<List<Map<String, dynamic>>> getTopLikedProductStats(
+    String userId, {
+    int limit = 20,
+  }) async {
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('product_stats')
+          .orderBy('likesReceived', descending: true)
+          .limit(limit)
+          .get();
+      return snap.docs.map((d) => d.data()).toList();
+    } catch (e) {
+      debugPrint('Get top liked product stats error: $e');
+      return const [];
+    }
   }
 
   /// Visita à aba Trends (conta no summary do próprio utilizador).

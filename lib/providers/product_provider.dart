@@ -471,9 +471,33 @@ class ProductProvider extends ChangeNotifier {
       final wasLiked = before?.likedBy.contains(userId) ?? false;
       // Update Firebase
       await _firebaseService.likeProduct(productId, userId);
+      final ownerId = before?.userId.trim() ?? '';
+      final productName = before?.name;
       if (!wasLiked) {
         unawaited(MetricsService.instance.trackLikeGiven(userId: userId));
+        if (ownerId.isNotEmpty && ownerId != userId) {
+          unawaited(
+            MetricsService.instance.trackProductCardLike(
+              ownerId: ownerId,
+              viewerId: userId,
+              productId: productId,
+              productName: productName,
+              liked: true,
+            ),
+          );
+        }
       } else {
+        if (ownerId.isNotEmpty && ownerId != userId) {
+          unawaited(
+            MetricsService.instance.trackProductCardLike(
+              ownerId: ownerId,
+              viewerId: userId,
+              productId: productId,
+              productName: productName,
+              liked: false,
+            ),
+          );
+        }
         unawaited(BadgesService.instance.evaluateAndSync(userId));
       }
 

@@ -19,27 +19,40 @@ class BadgesPanel extends StatelessWidget {
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (errorMessage != null && errorMessage!.isNotEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            errorMessage!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
-          ),
-        ),
-      );
-    }
     if (badges.isEmpty) {
+      if (errorMessage != null && errorMessage!.isNotEmpty) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text(
+              errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+        );
+      }
       return const Center(child: Text('Nenhum badge disponível.'));
     }
     return ListView.separated(
       padding: const EdgeInsets.all(14),
-      itemCount: badges.length,
+      itemCount: badges.length +
+          ((errorMessage != null && errorMessage!.isNotEmpty) ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        final badge = badges[index];
+        if (errorMessage != null &&
+            errorMessage!.isNotEmpty &&
+            index == 0) {
+          return Text(
+            errorMessage!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.red, fontSize: 12),
+          );
+        }
+        final badge = badges[
+            (errorMessage != null && errorMessage!.isNotEmpty)
+                ? index - 1
+                : index];
         final progress = badge.target <= 0
             ? 0.0
             : (badge.current / badge.target).clamp(0.0, 1.0);

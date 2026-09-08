@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/product_model.dart';
+import '../navigation/app_navigator.dart';
 import '../providers/auth_provider.dart';
+import '../services/firebase_service.dart';
+import '../services/shared_folder_link_service.dart';
 import 'create_account_screen.dart';
+import 'folder_products_screen.dart';
 import 'forgot_password_screen.dart';
 import 'main_shell.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final bool redirectToPendingSharedFolder;
+
+  const LoginScreen({
+    super.key,
+    this.redirectToPendingSharedFolder = false,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -36,6 +46,58 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  Future<void> _navigateAfterLogin() async {
+    final nav = appNavigatorKey.currentState;
+    if (nav == null) return;
+
+    if (!widget.redirectToPendingSharedFolder) {
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (route) => false,
+      );
+      return;
+    }
+
+    final pending = await SharedFolderLinkService.instance.loadPending();
+    if (pending == null || !pending.isValid) {
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (route) => false,
+      );
+      return;
+    }
+
+    List<Product> products = const [];
+    try {
+      final all = await FirebaseService().getUserProducts(pending.userId);
+      products = all
+          .where(
+            (p) =>
+                (p.category ?? '').trim().toLowerCase() ==
+                pending.folderName.trim().toLowerCase(),
+          )
+          .toList();
+    } catch (_) {
+      products = const [];
+    }
+
+    await SharedFolderLinkService.instance.clearPending();
+
+    await nav.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MainShell()),
+      (route) => false,
+    );
+    await nav.push(
+      MaterialPageRoute(
+        builder: (_) => FolderProductsScreen(
+          categoryName: pending.folderName,
+          products: products,
+          allowDelete: false,
+        ),
+      ),
+    );
+  }
+
   void _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -46,10 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (success && mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MainShell()),
-          (route) => false,
-        );
+        await _navigateAfterLogin();
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

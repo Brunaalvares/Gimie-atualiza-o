@@ -153,6 +153,26 @@ class BadgesService {
     ),
   ];
 
+  /// Catálogo local (progresso zerado) — fallback se Firestore falhar.
+  static List<BadgeProgress> catalogFallback() {
+    return catalog.map((def) {
+      return BadgeProgress(
+        badgeId: def.id,
+        title: def.title,
+        description: def.description,
+        category: def.category,
+        tier: def.tier,
+        target: def.target,
+        current: 0,
+        earned: false,
+        progressLabel: def.id == trendsetterBadgeId
+            ? 'Faltam ${def.target} visualizações para desbloquear'
+            : null,
+        isComingSoon: def.isComingSoon,
+      );
+    }).toList();
+  }
+
   Stream<List<BadgeProgress>> watchBadges(String userId) {
     return _firestore
         .collection('users')

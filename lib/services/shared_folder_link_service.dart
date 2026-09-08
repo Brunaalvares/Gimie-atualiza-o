@@ -115,14 +115,17 @@ class SharedFolderLinkService {
     final copied = await _tryCopy(link);
     if (!context.mounted) return;
 
-    // No web o clipboard pode falhar silenciosamente: sempre mostra o link.
+    // Always show the link on web (clipboard permissions vary by browser profile).
     if (kIsWeb || !copied) {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) {
           return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: const Text(
-              'Link da pasta',
+              'Compartilhar Pasta',
               style: TextStyle(
                 fontFamily: 'Raleway',
                 fontWeight: FontWeight.w700,
@@ -133,29 +136,53 @@ class SharedFolderLinkService {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  copied
-                      ? 'Link copiado! Você também pode copiar abaixo:'
-                      : 'Copie o link abaixo para compartilhar:',
-                  style: const TextStyle(
+                const Text(
+                  'Compartilhe este link com seus amigos:',
+                  style: TextStyle(
                     fontFamily: 'Roboto',
                     fontSize: 14,
                     color: Color(0xFF757575),
                   ),
                 ),
                 const SizedBox(height: 12),
-                SelectableText(
-                  link,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F5F5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: SelectableText(
+                    link,
+                    style: const TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 13,
+                      color: Color(0xFF6B2C5C),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  copied
+                      ? 'Link copiado! ✓ Toque acima se quiser copiar de novo.'
+                      : 'Toque no link acima para selecionar e copiar manualmente',
                   style: const TextStyle(
                     fontFamily: 'Roboto',
-                    fontSize: 13,
-                    color: Color(0xFF8B7FB8),
+                    fontSize: 12,
+                    color: Color(0xFF9E9E9E),
                   ),
                 ),
               ],
             ),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             actions: [
               TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text(
+                  'Fechar',
+                  style: TextStyle(color: Color(0xFF8B7FB8)),
+                ),
+              ),
+              ElevatedButton(
                 onPressed: () async {
                   final ok = await _tryCopy(link);
                   if (!context.mounted) return;
@@ -169,11 +196,14 @@ class SharedFolderLinkService {
                     ),
                   );
                 },
-                child: const Text('Copiar'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Fechar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF8B7FB8),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+                child: const Text('Copiar Link'),
               ),
             ],
           );

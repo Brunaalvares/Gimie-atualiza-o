@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../services/metrics_service.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/top_savers_week_section.dart';
+import '../widgets/product_network_image.dart';
 import 'user_profile_screen.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -261,14 +262,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     return Card(
                       margin: const EdgeInsets.only(bottom: 16),
                       child: ListTile(
-                        leading: ClipRRect(
+                        leading: ProductNetworkImage(
+                          imageUrl: product.imageUrl,
+                          width: 60,
+                          height: 60,
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            product.imageUrl,
-                            width: 60,
-                            height: 60,
-                            fit: BoxFit.cover,
-                          ),
                         ),
                         title: Text(product.name),
                         subtitle: Text(product.formattedPrice),

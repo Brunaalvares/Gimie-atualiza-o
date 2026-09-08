@@ -10,6 +10,7 @@ import '../services/api_service.dart';
 import '../services/scraping_service.dart';
 import '../services/share_service.dart';
 import '../utils/debug_helper.dart';
+import '../widgets/product_network_image.dart';
 
 /// Pré-visualização dedicada ao fluxo "Compartilhar com a Gimie".
 /// Ao escolher a pasta, salva automaticamente, fecha e devolve o usuário
@@ -39,7 +40,7 @@ class _ShareProductPreviewScreenState extends State<ShareProductPreviewScreen> {
   final List<String> _categories = [];
 
   static const String _fallbackImageUrl =
-      'https://via.placeholder.com/600x600.png?text=Gimie';
+      'https://placehold.co/600x600/png?text=Gimie';
 
   @override
   void initState() {
@@ -549,16 +550,18 @@ class _ShareProductPreviewScreenState extends State<ShareProductPreviewScreen> {
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(20),
                         ),
-                        child: Image.network(
-                          imageUrl,
+                        child: SizedBox(
                           height: 220,
                           width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+                          child: ProductNetworkImage(
+                            imageUrl: imageUrl,
                             height: 220,
-                            color: Colors.grey.shade200,
-                            child: const Center(
-                              child: Icon(Icons.image_not_supported),
+                            errorWidget: Container(
+                              height: 220,
+                              color: Colors.grey.shade200,
+                              child: const Center(
+                                child: Icon(Icons.image_not_supported),
+                              ),
                             ),
                           ),
                         ),

@@ -18,6 +18,7 @@ import '../widgets/badges_panel.dart';
 import '../widgets/profile_metrics_panel.dart';
 import '../widgets/profile_notifications_panel.dart';
 import '../widgets/user_avatar.dart';
+import '../widgets/product_network_image.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -1137,22 +1138,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           height: 46,
                                           color: const Color(0xFF8B7FB8)
                                               .withValues(alpha: 0.15),
-                                          child: coverImage.isEmpty
-                                              ? const Icon(
-                                                  Icons.folder_outlined,
-                                                  color: Color(0xFF6B2C5C),
-                                                )
-                                              : Image.network(
-                                                  coverImage,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (context,
-                                                      error, stackTrace) {
-                                                    return const Icon(
-                                                      Icons.folder_outlined,
-                                                      color: Color(0xFF6B2C5C),
-                                                    );
-                                                  },
-                                                ),
+                                    child: coverImage.isEmpty
+                                        ? const Icon(
+                                            Icons.folder_outlined,
+                                            color: Color(0xFF6B2C5C),
+                                          )
+                                        : ProductNetworkImage(
+                                            imageUrl: coverImage,
+                                            width: 46,
+                                            height: 46,
+                                            errorWidget: const Icon(
+                                              Icons.folder_outlined,
+                                              color: Color(0xFF6B2C5C),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(width: 12),

@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../services/scraping_service.dart';
 import '../utils/debug_helper.dart';
+import '../widgets/product_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AddProductScreen extends StatefulWidget {
@@ -37,7 +38,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   final List<String> _categories = [];
   static const String _fallbackImageUrl =
-      'https://via.placeholder.com/600x600.png?text=Gimie';
+      'https://placehold.co/600x600/png?text=Gimie';
 
   @override
   void initState() {
@@ -649,25 +650,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     children: [
                       ClipRRect(
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                        child: _scrapedData?.imageUrl != null && _scrapedData!.imageUrl!.isNotEmpty
-                            ? Image.network(
-                                _scrapedData!.imageUrl!,
-                                height: 180,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    height: 180,
-                                    color: Colors.grey[200],
-                                    child: const Center(child: Icon(Icons.image_not_supported)),
-                                  );
-                                },
-                              )
-                            : Container(
-                                height: 180,
-                                color: Colors.grey[200],
-                                child: const Center(child: Icon(Icons.image_not_supported)),
+                        child: SizedBox(
+                          height: 180,
+                          width: double.infinity,
+                          child: ProductNetworkImage(
+                            imageUrl: _scrapedData?.imageUrl ?? '',
+                            height: 180,
+                            errorWidget: Container(
+                              height: 180,
+                              color: Colors.grey[200],
+                              child: const Center(
+                                child: Icon(Icons.image_not_supported),
                               ),
+                            ),
+                          ),
+                        ),
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),

@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../providers/product_provider.dart';
 import '../services/metrics_service.dart';
 import '../services/shared_folder_link_service.dart';
+import '../widgets/product_network_image.dart';
 import 'add_product_screen.dart';
 
 class FolderProductsScreen extends StatefulWidget {
@@ -423,13 +424,10 @@ class _FolderProductsScreenState extends State<FolderProductsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                            image: DecorationImage(
-                              image: NetworkImage(product.imageUrl),
-                              fit: BoxFit.cover,
-                            ),
+                        child: ProductNetworkImage(
+                          imageUrl: product.imageUrl,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(16),
                           ),
                         ),
                       ),

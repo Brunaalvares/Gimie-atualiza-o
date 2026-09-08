@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/product_model.dart';
 import '../services/api_service.dart';
 import '../utils/debug_helper.dart';
+import 'product_network_image.dart';
 
 class ProductSuggestionsWidget extends StatefulWidget {
   final String category;
@@ -194,24 +195,14 @@ class _SuggestionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                child: product.imageUrl.isNotEmpty
-                    ? Image.network(
-                        product.imageUrl,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Colors.grey[200],
-                            child: const Icon(Icons.image_not_supported),
-                          );
-                        },
-                      )
-                    : Container(
-                        color: Colors.grey[200],
-                        child: const Icon(Icons.shopping_bag),
-                      ),
+              child: ProductNetworkImage(
+                imageUrl: product.imageUrl,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(8)),
+                errorWidget: Container(
+                  color: Colors.grey[200],
+                  child: const Icon(Icons.image_not_supported),
+                ),
               ),
             ),
             Padding(

@@ -8,6 +8,7 @@ import '../services/firebase_service.dart';
 import '../services/metrics_service.dart';
 import '../utils/profile_folder_layout.dart';
 import '../widgets/user_avatar.dart';
+import '../widgets/product_network_image.dart';
 import 'follow_list_screen.dart';
 import 'folder_products_screen.dart';
 
@@ -352,15 +353,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                                   Icons.folder_outlined,
                                                   color: Color(0xFF6B2C5C),
                                                 )
-                                              : Image.network(
-                                                  coverImage,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (context, error, stackTrace) {
-                                                    return const Icon(
-                                                      Icons.folder_outlined,
-                                                      color: Color(0xFF6B2C5C),
-                                                    );
-                                                  },
+                                              : ProductNetworkImage(
+                                                  imageUrl: coverImage,
+                                                  width: 46,
+                                                  height: 46,
+                                                  errorWidget: const Icon(
+                                                    Icons.folder_outlined,
+                                                    color: Color(0xFF6B2C5C),
+                                                  ),
                                                 ),
                                         ),
                                       ),

@@ -9,6 +9,7 @@ import '../services/firebase_service.dart';
 import '../services/shared_folder_link_service.dart';
 import '../navigation/app_navigator.dart';
 import '../widgets/download_app_modal.dart';
+import '../widgets/product_network_image.dart';
 import 'folder_products_screen.dart';
 import 'login_screen.dart';
 import 'main_shell.dart';
@@ -278,8 +279,9 @@ class _SharedHeader extends StatelessWidget {
               color: const Color(0xFF8B7FB8),
               child: hasPhoto
                   ? Image.network(
-                      photoUrl,
+                      ProductNetworkImage.normalizeUrl(photoUrl),
                       fit: BoxFit.cover,
+                      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
                       errorBuilder: (_, __, ___) => initialsChild,
                       loadingBuilder: (context, child, progress) {
                         if (progress == null) return child;
@@ -413,9 +415,6 @@ class _SharedProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = product.imageUrl.trim();
-    final hasImage = imageUrl.isNotEmpty;
-
     return Material(
       color: Colors.white,
       elevation: 2,
@@ -432,33 +431,9 @@ class _SharedProductCard extends StatelessWidget {
               child: Container(
                 width: double.infinity,
                 color: const Color(0xFFEFEFEF),
-                child: hasImage
-                    ? Image(
-                        image: NetworkImage(imageUrl),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                        errorBuilder: (_, __, ___) => const ColoredBox(
-                          color: Color(0xFFEFEFEF),
-                        ),
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const ColoredBox(
-                            color: Color(0xFFEFEFEF),
-                            child: Center(
-                              child: SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF8B7FB8),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      )
-                    : const ColoredBox(color: Color(0xFFEFEFEF)),
+                child: ProductNetworkImage(
+                  imageUrl: product.imageUrl,
+                ),
               ),
             ),
           ),

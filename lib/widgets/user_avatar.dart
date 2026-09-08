@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'product_network_image.dart';
 
 class UserAvatar extends StatelessWidget {
   final String name;
@@ -47,11 +48,10 @@ class UserAvatar extends StatelessWidget {
             color: backgroundColor,
             child: hasValidPhoto
                 ? Image.network(
-                    normalizedPhotoUrl,
-                    // Preenche o círculo mantendo proporção (sem distorção):
-                    // centraliza e recorta apenas o excedente das bordas.
+                    ProductNetworkImage.normalizeUrl(normalizedPhotoUrl),
                     fit: BoxFit.cover,
                     alignment: Alignment.center,
+                    webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
                     errorBuilder: (_, __, ___) => fallbackInitial,
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;

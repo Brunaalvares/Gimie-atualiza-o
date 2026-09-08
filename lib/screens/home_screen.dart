@@ -8,6 +8,7 @@ import '../models/product_model.dart';
 import '../services/metrics_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'follow_users_screen.dart';
+import '../widgets/product_network_image.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -428,14 +429,10 @@ class _ProductCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                image: DecorationImage(
-                  image: NetworkImage(product.imageUrl),
-                  fit: BoxFit.cover,
-                ),
-              ),
+            child: ProductNetworkImage(
+              imageUrl: product.imageUrl,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
             ),
           ),
           Padding(
